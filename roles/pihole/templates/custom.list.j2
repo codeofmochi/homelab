@@ -1,0 +1,4 @@
+# Managed by Ansible
+{% for item in pihole_local_domains %}
+{{ item.ip }} {{ item.domain }}
+{% endfor %}

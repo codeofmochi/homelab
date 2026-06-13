@@ -1,0 +1,26 @@
+---
+# handlers file for pihole
+- name: Reload user systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+    scope: user
+  become: true
+  become_user: "{{ pihole_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ pihole_uid }}"
+
+- name: Restart pihole
+  ansible.builtin.systemd:
+    name: pihole.service
+    state: restarted
+    scope: user
+  become: true
+  become_user: "{{ pihole_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ pihole_uid }}"
+
+- name: Restart systemd-resolved
+  ansible.builtin.systemd:
+    name: systemd-resolved
+    state: restarted
+  become: true

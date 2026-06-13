@@ -1,0 +1,40 @@
+# pihole.container - Managed by Ansible
+[Container]
+ContainerName=pihole
+Image={{ pihole_image }}
+Network=host
+
+AddCapability=NET_ADMIN
+AddCapability=NET_RAW
+
+Environment="TZ=UTC"
+Environment="FTLCONF_webserver_api_password={{ pihole_admin_password }}"
+Environment="FTLCONF_webserver_port={{ pihole_web_port }}"
+Environment="FTLCONF_dns_upstreams={{ pihole_dns_servers | join(';') }}"
+Environment="FTLCONF_misc_etc_dnsmasq_d=true"
+
+{% if pihole_local_domains | length > 0 %}
+{% set hosts_list = [] %}
+{% for item in pihole_local_domains %}
+{% set _ = hosts_list.append(item.ip ~ ' ' ~ item.domain) %}
+{% endfor %}
+Environment="FTLCONF_dns_hosts={{ hosts_list | join(';') }}"
+{% endif %}
+
+{% if pihole_dhcp_enabled | bool %}
+Environment="FTLCONF_dhcp_active=true"
+Environment="FTLCONF_dhcp_start={{ pihole_dhcp_start }}"
+Environment="FTLCONF_dhcp_end={{ pihole_dhcp_end }}"
+Environment="FTLCONF_dhcp_router={{ pihole_dhcp_router }}"
+Environment="FTLCONF_dhcp_leaseTime={{ pihole_dhcp_leasetime }}"
+{% endif %}
+
+Volume=/home/{{ pihole_user }}/pihole/etc-pihole:/etc/pihole:Z,U
+Volume=/home/{{ pihole_user }}/pihole/etc-dnsmasq.d:/etc/dnsmasq.d:Z,U
+
+[Service]
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

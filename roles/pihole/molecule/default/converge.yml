@@ -1,0 +1,58 @@
+---
+- name: Converge client-host network
+  hosts: client-host
+  become: true
+  tasks:
+    - name: Include network role
+      ansible.builtin.include_role:
+        name: network
+      vars:
+        network_interfaces:
+          - name: eth1
+            addresses:
+              - "192.168.56.11/24"
+
+- name: Gather facts from client-host
+  hosts: client-host
+  tasks:
+    - name: Gather facts
+      ansible.builtin.setup:
+
+- name: Converge pihole-host
+  hosts: pihole-host
+  become: true
+  tasks:
+    - name: Include network role
+      ansible.builtin.include_role:
+        name: network
+      vars:
+        network_sysctl_settings:
+          net.ipv4.ip_unprivileged_port_start: 53
+        network_interfaces:
+          - name: eth1
+            addresses:
+              - "192.168.56.10/24"
+
+    - name: Include podman_user role
+      ansible.builtin.include_role:
+        name: podman_user
+      vars:
+        podman_user_list: ["pihole"]
+
+    - name: Include pihole role
+      ansible.builtin.include_role:
+        name: pihole
+      vars:
+        pihole_user: pihole
+        pihole_admin_password: testpassword
+        pihole_dhcp_enabled: true
+        pihole_dhcp_start: "192.168.56.100"
+        pihole_dhcp_end: "192.168.56.150"
+        pihole_dhcp_router: "192.168.56.10"
+        pihole_dhcp_static_leases:
+          - mac: "{{ hostvars['client-host']['ansible_facts']['eth1']['macaddress'] }}"
+            ip: "192.168.56.150"
+            name: "client-host"
+        pihole_local_domains:
+          - domain: "test.local"
+            ip: "192.168.56.150"

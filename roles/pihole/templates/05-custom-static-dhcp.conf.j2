@@ -1,0 +1,8 @@
+# Managed by Ansible
+# Force dnsmasq to broadcast DHCP responses instead of unicast.
+# This is required for rootless Podman where ARP-cache injection is blocked.
+dhcp-broadcast
+
+{% for item in pihole_dhcp_static_leases %}
+dhcp-host={{ item.mac }},{{ item.ip }}{% if item.name is defined %},{{ item.name }}{% endif %}
+{% endfor %}

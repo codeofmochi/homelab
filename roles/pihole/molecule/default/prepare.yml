@@ -1,0 +1,8 @@
+---
+- name: Prepare pihole-host
+  hosts: pihole-host
+  become: true
+  tasks:
+    - name: Include podman role
+      ansible.builtin.include_role:
+        name: podman

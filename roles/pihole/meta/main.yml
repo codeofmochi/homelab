@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  author: alexandre
+  description: Deploy Pi-hole as a rootless Podman container with custom DNS & DHCP options.
+  license: MIT
+  min_ansible_version: "2.10"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - all
+
+dependencies: []

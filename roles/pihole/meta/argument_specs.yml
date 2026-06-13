@@ -1,0 +1,82 @@
+---
+argument_specs:
+  main:
+    short_description: The main entry point for the pihole role.
+    options:
+      pihole_user:
+        type: str
+        required: true
+        description: The system user that will run the rootless container.
+      pihole_image:
+        type: str
+        default: docker.io/pihole/pihole:latest
+        description: The Pi-hole image to use.
+      pihole_web_port:
+        type: int
+        default: 8080
+        description: The port to use for the Pi-hole web admin interface.
+      pihole_admin_password:
+        type: str
+        default: ChangeMePlease
+        description: The admin password for the Pi-hole web interface.
+      pihole_dns_servers:
+        type: list
+        elements: str
+        default: ["9.9.9.9", "149.112.112.112"]
+        description: Upstream DNS servers for Pi-hole.
+      pihole_local_domains:
+        type: list
+        elements: dict
+        default: []
+        description: Local DNS domain mappings.
+        options:
+          domain:
+            type: str
+            required: true
+            description: The local domain name.
+          ip:
+            type: str
+            required: true
+            description: The IP address the domain resolves to.
+      pihole_dhcp_enabled:
+        type: bool
+        default: false
+        description: Whether to enable DHCP on Pi-hole.
+      pihole_dhcp_start:
+        type: str
+        required: false
+        description: Start of the DHCP IP range.
+      pihole_dhcp_end:
+        type: str
+        required: false
+        description: End of the DHCP IP range.
+      pihole_dhcp_router:
+        type: str
+        required: false
+        description: Gateway/router IP for DHCP clients.
+      pihole_dhcp_leasetime:
+        type: str
+        default: "24h"
+        description: DHCP lease duration.
+      pihole_dhcp_static_leases:
+        type: list
+        elements: dict
+        default: []
+        description: Static DHCP leases.
+        options:
+          mac:
+            type: str
+            required: true
+            description: MAC address of the client.
+          ip:
+            type: str
+            required: true
+            description: IP address to assign to the client.
+          name:
+            type: str
+            required: false
+            description: Hostname of the client.
+      pihole_disable_systemd_resolved:
+        type: bool
+        default: true
+        description: Stop and disable systemd-resolved on the host.

@@ -1,0 +1,28 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: vagrant
+platforms:
+  - name: pihole-host
+    box: bento/ubuntu-24.04
+    memory: 2048
+    cpus: 1
+    interfaces:
+      - network_name: private_network
+        ip: 192.168.56.10
+        virtualbox__intnet: "pihole-net"
+  - name: client-host
+    box: bento/ubuntu-24.04
+    memory: 1024
+    cpus: 1
+    interfaces:
+      - network_name: private_network
+        ip: 192.168.56.11
+        virtualbox__intnet: "pihole-net"
+provisioner:
+  name: ansible
+  env:
+    VAGRANT_WSL_ENABLE_WINDOWS_ACCESS: "1"
+verifier:
+  name: ansible

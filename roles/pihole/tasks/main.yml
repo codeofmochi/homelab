@@ -1,0 +1,230 @@
+---
+# tasks file for pihole
+- name: Get UID of the podman user
+  ansible.builtin.command: "id -u {{ pihole_user }}"
+  changed_when: false
+  register: pihole_user_uid
+
+- name: Set pihole UID fact
+  ansible.builtin.set_fact:
+    pihole_uid: "{{ pihole_user_uid.stdout }}"
+
+- name: Check if Pi-hole image is present
+  ansible.builtin.command: "podman image exists {{ pihole_image }}"
+  become: true
+  become_user: "{{ pihole_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ pihole_uid }}"
+  register: pihole_image_exists
+  failed_when: false
+  changed_when: false
+
+- name: Prefetch Pi-hole container image
+  ansible.builtin.command: "podman pull {{ pihole_image }}"
+  become: true
+  become_user: "{{ pihole_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ pihole_uid }}"
+  when: pihole_image_exists.rc != 0
+  changed_when: true
+
+- name: Handle systemd-resolved and bootstrap resolv.conf
+  block:
+    - name: Stop and disable systemd-resolved
+      ansible.builtin.systemd:
+        name: systemd-resolved
+        state: stopped
+        enabled: false
+      failed_when: false
+
+    - name: Check resolv.conf status
+      ansible.builtin.stat:
+        path: /etc/resolv.conf
+      register: resolv_conf_stat
+
+    - name: Remove systemd-resolved resolv.conf symlink
+      ansible.builtin.file:
+        path: /etc/resolv.conf
+        state: absent
+      when: resolv_conf_stat.stat.islnk is defined and resolv_conf_stat.stat.islnk
+
+    - name: Check if resolv.conf points to local DNS
+      ansible.builtin.lineinfile:
+        path: /etc/resolv.conf
+        line: "nameserver 127.0.0.1"
+        state: present
+      check_mode: true
+      register: resolv_points_to_local
+      failed_when: false
+      changed_when: false
+      when: >
+        resolv_conf_stat.stat.exists and
+        not (resolv_conf_stat.stat.islnk is defined and resolv_conf_stat.stat.islnk)
+
+    - name: Create static bootstrap resolv.conf pointing to upstream DNS
+      ansible.builtin.copy:
+        dest: /etc/resolv.conf
+        content: |
+          nameserver {{ pihole_dns_servers[0] }}
+        mode: '0644'
+      when: >
+        not resolv_conf_stat.stat.exists or
+        (resolv_conf_stat.stat.islnk is defined and resolv_conf_stat.stat.islnk) or
+        (resolv_points_to_local.found is defined and resolv_points_to_local.found == 0)
+  become: true
+  when: pihole_disable_systemd_resolved | bool
+
+- name: Check if configuration directories exist
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+    - "/home/{{ pihole_user }}/pihole"
+    - "/home/{{ pihole_user }}/pihole/etc-pihole"
+    - "/home/{{ pihole_user }}/pihole/etc-pihole/hosts"
+    - "/home/{{ pihole_user }}/pihole/etc-dnsmasq.d"
+  register: pihole_dirs_stat
+
+- name: Create configuration directories with correct ownership
+  ansible.builtin.file:
+    path: "{{ item.item }}"
+    state: directory
+    owner: "{{ pihole_user }}"
+    group: "{{ pihole_user }}"
+    mode: '0755'
+  loop: "{{ pihole_dirs_stat.results }}"
+  when: not item.stat.exists
+
+- name: Template local DNS custom.list to temp path
+  ansible.builtin.template:
+    src: custom.list.j2
+    dest: "/home/{{ pihole_user }}/pihole_tmp_custom.list"
+    mode: '0644'
+  become: true
+  become_user: "{{ pihole_user }}"
+  register: custom_list_temp
+
+- name: Check if custom.list exists in volume
+  ansible.builtin.stat:
+    path: "/home/{{ pihole_user }}/pihole/etc-pihole/hosts/custom.list"
+  register: custom_list_dest
+
+- name: Copy custom.list into volume using podman unshare
+  ansible.builtin.command:
+    cmd: "podman unshare cp /home/{{ pihole_user }}/pihole_tmp_custom.list /home/{{ pihole_user }}/pihole/etc-pihole/hosts/custom.list"
+  become: true
+  become_user: "{{ pihole_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ pihole_uid }}"
+  when: custom_list_temp.changed or not custom_list_dest.stat.exists
+  notify: Restart pihole
+
+- name: Set ownership of custom.list using podman unshare
+  ansible.builtin.command:
+    cmd: "podman unshare chown 1000:1000 /home/{{ pihole_user }}/pihole/etc-pihole/hosts/custom.list"
+  become: true
+  become_user: "{{ pihole_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ pihole_uid }}"
+  when: custom_list_temp.changed or not custom_list_dest.stat.exists
+
+- name: Template static DHCP leases to temp path
+  ansible.builtin.template:
+    src: 05-custom-static-dhcp.conf.j2
+    dest: "/home/{{ pihole_user }}/pihole_tmp_05-custom-static-dhcp.conf"
+    mode: '0644'
+  become: true
+  become_user: "{{ pihole_user }}"
+  register: dhcp_conf_temp
+  when: pihole_dhcp_enabled | bool
+
+- name: Check if static DHCP lease file exists in volume
+  ansible.builtin.stat:
+    path: "/home/{{ pihole_user }}/pihole/etc-dnsmasq.d/05-custom-static-dhcp.conf"
+  register: dhcp_conf_dest
+
+- name: Copy static DHCP leases into volume using podman unshare
+  ansible.builtin.command:
+    cmd: "podman unshare cp /home/{{ pihole_user }}/pihole_tmp_05-custom-static-dhcp.conf /home/{{ pihole_user }}/pihole/etc-dnsmasq.d/05-custom-static-dhcp.conf"
+  become: true
+  become_user: "{{ pihole_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ pihole_uid }}"
+  when: pihole_dhcp_enabled | bool and (dhcp_conf_temp.changed or not dhcp_conf_dest.stat.exists)
+  notify: Restart pihole
+
+- name: Set ownership of static DHCP leases using podman unshare
+  ansible.builtin.command:
+    cmd: "podman unshare chown 1000:1000 /home/{{ pihole_user }}/pihole/etc-dnsmasq.d/05-custom-static-dhcp.conf"
+  become: true
+  become_user: "{{ pihole_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ pihole_uid }}"
+  when: pihole_dhcp_enabled | bool and (dhcp_conf_temp.changed or not dhcp_conf_dest.stat.exists)
+
+- name: Remove static DHCP leases if DHCP disabled
+  ansible.builtin.command:
+    cmd: "podman unshare rm -f /home/{{ pihole_user }}/pihole/etc-dnsmasq.d/05-custom-static-dhcp.conf"
+  become: true
+  become_user: "{{ pihole_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ pihole_uid }}"
+  when: not (pihole_dhcp_enabled | bool) and dhcp_conf_dest.stat.exists
+  notify: Restart pihole
+
+- name: Remove temp static DHCP lease file if DHCP disabled
+  ansible.builtin.file:
+    path: "/home/{{ pihole_user }}/pihole_tmp_05-custom-static-dhcp.conf"
+    state: absent
+  become: true
+  become_user: "{{ pihole_user }}"
+  when: not (pihole_dhcp_enabled | bool)
+
+- name: Ensure podman systemd quadlet directory exists
+  ansible.builtin.file:
+    path: "/home/{{ pihole_user }}/.config/containers/systemd"
+    state: directory
+    mode: '0700'
+  become: true
+  become_user: "{{ pihole_user }}"
+
+- name: Deploy pihole container quadlet
+  ansible.builtin.template:
+    src: pihole.container.j2
+    dest: "/home/{{ pihole_user }}/.config/containers/systemd/pihole.container"
+    mode: '0644'
+  become: true
+  become_user: "{{ pihole_user }}"
+  notify:
+    - Reload user systemd
+    - Restart pihole
+
+- name: Flush handlers to apply configuration/quadlet updates
+  ansible.builtin.meta: flush_handlers
+
+- name: Ensure pihole service is started and enabled
+  ansible.builtin.systemd:
+    name: pihole.service
+    state: started
+    enabled: true
+    scope: user
+    daemon_reload: true
+  become: true
+  become_user: "{{ pihole_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ pihole_uid }}"
+
+- name: Wait for Pi-hole DNS to be ready
+  ansible.builtin.wait_for:
+    port: 53
+    host: 127.0.0.1
+    timeout: 60
+  when: pihole_disable_systemd_resolved | bool
+
+- name: Point resolv.conf to local Pi-hole
+  ansible.builtin.copy:
+    dest: /etc/resolv.conf
+    content: |
+      nameserver 127.0.0.1
+    mode: '0644'
+  become: true
+  when: pihole_disable_systemd_resolved | bool

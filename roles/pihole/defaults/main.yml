@@ -1,0 +1,16 @@
+---
+# defaults file for pihole
+pihole_image: "docker.io/pihole/pihole:latest"
+pihole_web_port: 8080
+pihole_admin_password: "ChangeMePlease"
+pihole_dns_servers:
+  - "9.9.9.9"
+  - "149.112.112.112"
+pihole_local_domains: []
+pihole_dhcp_enabled: false
+pihole_dhcp_start: ""
+pihole_dhcp_end: ""
+pihole_dhcp_router: ""
+pihole_dhcp_leasetime: "24h"
+pihole_dhcp_static_leases: []
+pihole_disable_systemd_resolved: true

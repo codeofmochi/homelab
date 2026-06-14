@@ -23,8 +23,9 @@ This role manages network configuration on Ubuntu using Netplan and configures k
 | Key           | Description                                       | Required |
 | :------------ | :------------------------------------------------ | :------- |
 | `name`        | The name of the network interface (e.g., `eth0`). | Yes      |
-| `addresses`   | List of IP addresses in CIDR notation.            | Yes      |
+| `addresses`   | List of IP addresses (IPv4 or IPv6) in CIDR notation. | Yes      |
 | `gateway4`    | IPv4 gateway address.                             | No       |
+| `gateway6`    | IPv6 gateway address.                             | No       |
 | `nameservers` | List of DNS nameserver IP addresses.              | No       |
 
 ### Interface Example
@@ -32,10 +33,12 @@ This role manages network configuration on Ubuntu using Netplan and configures k
 - name: eth0
   addresses:
     - 192.168.1.10/24
+    - fd00:dead:beef::10/64
   gateway4: 192.168.1.1
+  gateway6: fd00:dead:beef::1
   nameservers:
     - 1.1.1.1
-    - 8.8.8.8
+    - 2606:4700:4700::1111
 ```
 
 ## Example Playbook

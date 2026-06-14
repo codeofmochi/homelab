@@ -17,8 +17,10 @@
       ansible.builtin.assert:
         that:
           - "'inet 192.168.56.10/24' in network_eth1_output.stdout"
+          - "'inet6 fd00:dead:beef::10/64' in network_eth1_output.stdout"
           - "'inet 192.168.56.30/24' in network_eth2_output.stdout"
-        fail_msg: "Static IPs were not applied correctly"
+          - "'inet6 fd00:dead:beef::30/64' in network_eth2_output.stdout"
+        fail_msg: "Static IPs (IPv4 or IPv6) were not applied correctly"
 
     - name: Read sysctl values
       ansible.builtin.command: "cat /proc/sys/net/ipv4/{{ item }}"

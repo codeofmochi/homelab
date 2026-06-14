@@ -225,6 +225,9 @@
     dest: /etc/resolv.conf
     content: |
       nameserver 127.0.0.1
+      {% if pihole_local_ipv6 | default('') != '' %}
+      nameserver ::1
+      {% endif %}
     mode: '0644'
   become: true
   when: pihole_disable_systemd_resolved | bool

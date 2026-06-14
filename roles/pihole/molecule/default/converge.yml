@@ -11,6 +11,7 @@
           - name: eth1
             addresses:
               - "192.168.56.11/24"
+              - "fd00:dead:beef::11/64"
 
 - name: Gather facts from client-host
   hosts: client-host
@@ -32,6 +33,7 @@
           - name: eth1
             addresses:
               - "192.168.56.10/24"
+              - "fd00:dead:beef::10/64"
 
     - name: Include podman_user role
       ansible.builtin.include_role:
@@ -45,6 +47,7 @@
       vars:
         pihole_user: pihole
         pihole_admin_password: testpassword
+        pihole_local_ipv6: "fd00:dead:beef::10"
         pihole_dhcp_enabled: true
         pihole_dhcp_start: "192.168.56.100"
         pihole_dhcp_end: "192.168.56.150"
@@ -56,3 +59,5 @@
         pihole_local_domains:
           - domain: "test.local"
             ip: "192.168.56.150"
+          - domain: "ipv6-test.local"
+            ip: "fd00:dead:beef::150"

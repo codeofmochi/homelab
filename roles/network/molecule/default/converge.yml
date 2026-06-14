@@ -12,6 +12,10 @@
           net.ipv4.conf.all.src_valid_mark: 1
         network_interfaces:
           - name: enp0s8
-            addresses: ["192.168.56.10/24"]
+            addresses:
+              - "192.168.56.10/24"
+              - "fd00:dead:beef::10/64"
           - name: enp0s9
-            addresses: ["192.168.56.30/24"]
+            addresses:
+              - "192.168.56.30/24"
+              - "fd00:dead:beef::30/64"

@@ -28,6 +28,7 @@ Available variables are listed below, along with default values (see `defaults/m
 | `pihole_dhcp_leasetime` | `"24h"` | Default DHCP lease duration. |
 | `pihole_dhcp_static_leases` | `[]` | List of static DHCP mappings, each containing `mac`, `ip`, and optionally `name`. |
 | `pihole_disable_systemd_resolved` | `true` | Whether to stop/disable systemd-resolved and make the host point to the local Pi-hole. |
+| `pihole_local_ipv6` | `""` | Optional static IPv6 address (preferably ULA) of the host for FTL local assignment and loopback (`::1`) DNS. |
 
 ### Local DNS Mappings Example
 ```yaml

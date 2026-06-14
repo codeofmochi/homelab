@@ -14,3 +14,4 @@ pihole_dhcp_router: ""
 pihole_dhcp_leasetime: "24h"
 pihole_dhcp_static_leases: []
 pihole_disable_systemd_resolved: true
+pihole_local_ipv6: ""

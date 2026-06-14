@@ -12,6 +12,9 @@ Environment="FTLCONF_webserver_api_password={{ pihole_admin_password }}"
 Environment="FTLCONF_webserver_port={{ pihole_web_port }}"
 Environment="FTLCONF_dns_upstreams={{ pihole_dns_servers | join(';') }}"
 Environment="FTLCONF_misc_etc_dnsmasq_d=true"
+{% if pihole_local_ipv6 | default('') != '' %}
+Environment="FTLCONF_LOCAL_IPV6={{ pihole_local_ipv6 }}"
+{% endif %}
 
 {% if pihole_local_domains | length > 0 %}
 {% set hosts_list = [] %}

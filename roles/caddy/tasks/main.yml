@@ -57,7 +57,7 @@
     group: "{{ caddy_user }}"
     mode: '0644'
   notify:
-    - Reload user systemd
+    - Reload user systemd for caddy
     - Restart caddy
 
 - name: Ensure caddy service is started and enabled

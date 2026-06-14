@@ -1,0 +1,72 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: vagrant
+platforms:
+  - name: homelab-server
+    box: bento/ubuntu-24.04
+    memory: 8192
+    cpus: 4
+    config_options:
+      vm.boot_timeout: 600
+    groups:
+      - homelab_servers
+    interfaces:
+      - network_name: private_network
+        ip: 192.168.56.10
+        virtualbox__intnet: "homelab-private-net"
+      - network_name: private_network
+        ip: 192.168.56.11
+        virtualbox__intnet: "homelab-private-net"
+      - network_name: private_network
+        ip: 192.168.56.12
+        virtualbox__intnet: "homelab-private-net"
+  - name: client-lan
+    box: bento/ubuntu-24.04
+    memory: 1024
+    cpus: 1
+    config_options:
+      vm.boot_timeout: 600
+    interfaces:
+      - network_name: private_network
+        ip: 192.168.56.20
+        virtualbox__intnet: "homelab-private-net"
+provisioner:
+  name: ansible
+  env:
+    VAGRANT_WSL_ENABLE_WINDOWS_ACCESS: "1"
+    ANSIBLE_ROLES_PATH: ../../roles
+  config_options:
+    defaults:
+      roles_path: ../../roles
+      deprecation_warnings: true
+  inventory:
+    group_vars:
+      all:
+        secrets_public_eth_name: "eth1"
+        secrets_private_eth_name: "eth2"
+        secrets_default_eth_name: "eth3"
+        secrets_public_interface_ip: "192.168.56.10"
+        secrets_public_interface_prefix: "24"
+        secrets_public_gateway4: "192.168.56.1"
+        secrets_private_interface_ip: "192.168.56.11"
+        secrets_private_interface_prefix: "24"
+        secrets_private_interface_ipv6: "fd00:abcd:1234:1::10"
+        secrets_default_interface_ip: "192.168.56.12"
+        secrets_default_interface_prefix: "24"
+        secrets_default_gateway4: "192.168.56.1"
+        secrets_default_interface_link_local_ipv6: "fe80::12"
+        secrets_lan_router_ip: "192.168.56.1"
+        secrets_pihole_dhcp_start: "192.168.56.100"
+        secrets_pihole_dhcp_end: "192.168.56.200"
+        secrets_pihole_local_ipv6: "fd00:abcd:1234:1::11"
+        secrets_pihole_admin_password: "mock_pihole_pass"
+        secrets_wireguard_port: 51820
+        secrets_wireguard_server_url: "192.168.56.10"
+        secrets_wireguard_allowed_ips: "192.168.56.0/24"
+        secrets_vaultwarden_admin_password: "mock_vaultwarden_pass"
+  playbooks:
+    converge: converge.yml
+verifier:
+  name: ansible

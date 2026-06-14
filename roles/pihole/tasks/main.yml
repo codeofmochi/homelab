@@ -179,6 +179,40 @@
   become_user: "{{ pihole_user }}"
   when: not (pihole_dhcp_enabled | bool)
 
+- name: Template wildcard DNS conf to temp path
+  ansible.builtin.template:
+    src: 99-wildcards.conf.j2
+    dest: "/home/{{ pihole_user }}/pihole_tmp_99-wildcards.conf"
+    mode: '0644'
+  become: true
+  become_user: "{{ pihole_user }}"
+  register: wildcard_conf_temp
+  when: pihole_enable_wildcard_lan | default(false) | bool
+
+- name: Check if wildcard DNS conf exists in volume
+  ansible.builtin.stat:
+    path: "/home/{{ pihole_user }}/pihole/etc-dnsmasq.d/99-wildcards.conf"
+  register: wildcard_conf_dest
+
+- name: Copy wildcard DNS conf into volume using podman unshare
+  ansible.builtin.command:
+    cmd: "podman unshare cp /home/{{ pihole_user }}/pihole_tmp_99-wildcards.conf /home/{{ pihole_user }}/pihole/etc-dnsmasq.d/99-wildcards.conf"
+  become: true
+  become_user: "{{ pihole_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ pihole_uid }}"
+  when: (pihole_enable_wildcard_lan | default(false) | bool) and (wildcard_conf_temp.changed or not wildcard_conf_dest.stat.exists)
+  notify: Restart pihole
+
+- name: Set ownership of wildcard DNS conf using podman unshare
+  ansible.builtin.command:
+    cmd: "podman unshare chown 1000:1000 /home/{{ pihole_user }}/pihole/etc-dnsmasq.d/99-wildcards.conf"
+  become: true
+  become_user: "{{ pihole_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ pihole_uid }}"
+  when: (pihole_enable_wildcard_lan | default(false) | bool) and (wildcard_conf_temp.changed or not wildcard_conf_dest.stat.exists)
+
 - name: Ensure podman systemd quadlet directory exists
   ansible.builtin.file:
     path: "/home/{{ pihole_user }}/.config/containers/systemd"
@@ -195,7 +229,7 @@
   become: true
   become_user: "{{ pihole_user }}"
   notify:
-    - Reload user systemd
+    - Reload user systemd for pihole
     - Restart pihole
 
 - name: Flush handlers to apply configuration/quadlet updates
@@ -231,3 +265,14 @@
     mode: '0644'
   become: true
   when: pihole_disable_systemd_resolved | bool
+
+- name: Clean up temporary configuration files on host
+  ansible.builtin.file:
+    path: "/home/{{ pihole_user }}/{{ item }}"
+    state: absent
+  loop:
+    - pihole_tmp_custom.list
+    - pihole_tmp_05-custom-static-dhcp.conf
+    - pihole_tmp_99-wildcards.conf
+  become: true
+  become_user: "{{ pihole_user }}"

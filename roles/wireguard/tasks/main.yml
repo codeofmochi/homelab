@@ -71,7 +71,7 @@
     mode: '0644'
   become: true
   notify:
-    - Reload user systemd
+    - Reload user systemd for wireguard
     - Restart wireguard
 
 - name: Ensure WireGuard service is started and enabled

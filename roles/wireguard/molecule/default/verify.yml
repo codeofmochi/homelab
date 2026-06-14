@@ -2,44 +2,13 @@
 - name: Verify
   hosts: server
   gather_facts: false
+  vars:
+    wireguard_user: wireguard
   tasks:
-    - name: Get wireguard user UID
-      ansible.builtin.getent:
-        database: passwd
-        key: "wireguard"
-
-    - name: Set wireguard UID fact
-      ansible.builtin.set_fact:
-        wireguard_uid: "{{ getent_passwd['wireguard'][1] }}"
-
-    - name: Check wireguard service status
-      ansible.builtin.systemd:
-        name: wireguard.service
-        scope: user
-      become: true
-      become_user: "wireguard"
-      environment:
-        XDG_RUNTIME_DIR: "/run/user/{{ wireguard_uid }}"
-      register: wireguard_service_status
-
-    - name: Assert wireguard service is running
-      ansible.builtin.assert:
-        that:
-          - wireguard_service_status.status.ActiveState == 'active'
-
-    - name: Check for wg0 interface inside container
-      ansible.builtin.command: podman exec wireguard ip addr show wg0
-      become: true
-      become_user: "wireguard"
-      environment:
-        XDG_RUNTIME_DIR: "/run/user/{{ wireguard_uid }}"
-      register: wireguard_wg0_output
-      changed_when: false
-
-    - name: Assert wg0 exists
-      ansible.builtin.assert:
-        that:
-          - "'wg0' in wireguard_wg0_output.stdout"
+    - name: Run shared WireGuard verification tasks
+      ansible.builtin.include_role:
+        name: wireguard
+        tasks_from: verify.yml
 
     - name: Check wireguard status inside container
       ansible.builtin.command: podman exec wireguard wg show

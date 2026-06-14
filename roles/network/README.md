@@ -17,6 +17,7 @@ This role manages network configuration on Ubuntu using Netplan and configures k
 | :------------------------ | :--------------------------------------------------------------------------- | :------- | :------ |
 | `network_interfaces`      | List of interface configurations. See [Interface Schema](#interface-schema). | No       | `[]`    |
 | `network_sysctl_settings` | Dictionary of sysctl keys and values.                                        | No       | `{}`    |
+| `network_dns_servers`     | List of DNS nameserver IP addresses to write to `/etc/resolv.conf`.           | No       | `[]`    |
 
 ### Interface Schema
 

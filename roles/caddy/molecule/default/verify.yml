@@ -5,29 +5,10 @@
   vars:
     caddy_user: services_user
   tasks:
-    - name: Get caddy user UID
-      ansible.builtin.getent:
-        database: passwd
-        key: "{{ caddy_user }}"
-
-    - name: Set caddy UID fact
-      ansible.builtin.set_fact:
-        caddy_uid: "{{ getent_passwd[caddy_user][1] }}"
-
-    - name: Check if caddy service is running
-      ansible.builtin.systemd:
-        name: caddy.service
-        scope: user
-      become: true
-      become_user: "{{ caddy_user }}"
-      environment:
-        XDG_RUNTIME_DIR: "/run/user/{{ caddy_uid }}"
-      register: caddy_service_status
-
-    - name: Assert caddy service is active
-      ansible.builtin.assert:
-        that:
-          - caddy_service_status.status.ActiveState == 'active'
+    - name: Run shared Caddy verification tasks
+      ansible.builtin.include_role:
+        name: caddy
+        tasks_from: verify.yml
 
     - name: Check Caddy reachability
       ansible.builtin.uri:
@@ -47,27 +28,10 @@
       ansible.builtin.reboot:
       become: true
 
-    - name: Get caddy user UID after reboot
-      ansible.builtin.getent:
-        database: passwd
-        key: "{{ caddy_user }}"
-
-    - name: Set caddy UID fact after reboot
-      ansible.builtin.set_fact:
-        caddy_uid: "{{ getent_passwd[caddy_user][1] }}"
-
-    - name: Check if caddy service is running after reboot
-      ansible.builtin.systemd:
-        name: caddy.service
-        scope: user
-      become: true
-      become_user: "{{ caddy_user }}"
-      environment:
-        XDG_RUNTIME_DIR: "/run/user/{{ caddy_uid }}"
-      register: caddy_service_status_post
-      retries: 10
-      delay: 5
-      until: caddy_service_status_post.status.ActiveState == 'active'
+    - name: Run shared Caddy verification tasks after reboot
+      ansible.builtin.include_role:
+        name: caddy
+        tasks_from: verify.yml
 
     - name: Check Caddy reachability after reboot
       ansible.builtin.uri:

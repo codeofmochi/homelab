@@ -1,0 +1,158 @@
+---
+- name: Provision and Configure Homelab Server
+  hosts: homelab_servers
+  become: true
+  # vars_files removed; variables loaded automatically via inventory group_vars/all/
+  vars:
+    sysctl_overwrite:
+      # Required for rootless Podman to spawn containers using user namespaces
+      kernel.unprivileged_userns_clone: 1
+      # Allocates enough namespaces for rootless containers to allocate nested spaces
+      user.max_user_namespaces: 28633
+      # Allows unprivileged containers (Caddy/Pi-hole) to bind to ports >= 53
+      net.ipv4.ip_unprivileged_port_start: 53
+      # Allows IP routing from WireGuard to the local LAN segment
+      net.ipv4.ip_forward: 1
+      # Allows IPv6 routing from WireGuard to local LAN segment
+      net.ipv6.conf.all.forwarding: 1
+      net.ipv6.conf.default.forwarding: 1
+      # Allows containers to run ping checks
+      net.ipv4.ping_group_range: "0 2147483647"
+      # Required for WireGuard routing validation
+      net.ipv4.conf.all.src_valid_mark: 1
+
+    network_interfaces:
+      - name: "{{ secrets_public_eth_name }}"
+        addresses:
+          - "{{ secrets_public_interface_ip }}/{{ secrets_public_interface_prefix | default('24') }}"
+        gateway4: "{{ secrets_public_gateway4 | default('') }}"
+        nameservers: "{{ network_dns_servers | default([]) }}"
+      - name: "{{ secrets_private_eth_name }}"
+        addresses: "{{ [secrets_private_interface_ip ~ '/' ~ (secrets_private_interface_prefix | default('24'))] + ([secrets_private_interface_ipv6 ~ '/64'] if secrets_private_interface_ipv6 | default('') != '' else []) }}"
+        nameservers: "{{ network_dns_servers | default([]) }}"
+      - name: "{{ secrets_default_eth_name }}"
+        addresses: "{{ [secrets_default_interface_ip ~ '/' ~ (secrets_default_interface_prefix | default('24'))] + ([secrets_default_interface_link_local_ipv6 ~ '/64'] if secrets_default_interface_link_local_ipv6 | default('') != '' else []) }}"
+        gateway4: "{{ secrets_default_gateway4 | default('') }}"
+        nameservers: "{{ network_dns_servers | default([]) }}"
+
+
+  tasks:
+    # 1. DevSec Hardening Roles
+    - name: Run DevSec OS Hardening
+      ansible.builtin.import_role:
+        name: devsec.hardening.os_hardening
+      tags: hardening
+
+    - name: Run DevSec SSH Hardening
+      ansible.builtin.import_role:
+        name: devsec.hardening.ssh_hardening
+      tags: hardening
+
+    # 2. Network Role - Bootstrap (Quad9 DNS)
+    - name: Apply base network routing and bootstrap DNS
+      ansible.builtin.import_role:
+        name: network
+      vars:
+        network_sysctl_settings: "{{ sysctl_overwrite }}"
+        network_dns_servers:
+          - "9.9.9.9"
+          - "149.112.112.112"
+
+    # 3. Podman base installation
+    - name: Configure Podman on Host for Ansible user
+      ansible.builtin.import_role:
+        name: podman
+      vars:
+        podman_user: "{{ ansible_user }}"
+
+    # 4. Podman Users Configuration
+    - name: Create rootless container host users
+      ansible.builtin.import_role:
+        name: podman_user
+      vars:
+        podman_user_list:
+          - public
+          - private
+          - wireguard
+          - pihole
+
+    # 5. Podman Networks Configuration
+    - name: Configure internal rootless podman networks
+      ansible.builtin.import_role:
+        name: podman_network
+      vars:
+        podman_network_list:
+          - name: public_network
+            user: public
+          - name: private_network
+            user: private
+
+    # 6. Pi-hole DNS Service
+    - name: Provision Pi-hole DNS (bound to private interface)
+      ansible.builtin.import_role:
+        name: pihole
+      vars:
+        pihole_user: pihole
+        pihole_dns_interface: "{{ secrets_private_eth_name }}"
+        pihole_dns_listening_mode: "BIND"
+        pihole_dns_servers:
+          - "9.9.9.9"
+          - "149.112.112.112"
+          - "2620:fe::fe"
+          - "2620:fe::9"
+        pihole_admin_password: "{{ secrets_pihole_admin_password }}"
+        pihole_dhcp_enabled: true
+        pihole_dhcp_start: "{{ secrets_pihole_dhcp_start }}"
+        pihole_dhcp_end: "{{ secrets_pihole_dhcp_end }}"
+        pihole_dhcp_router: "{{ secrets_lan_router_ip }}"
+        pihole_local_ipv6: "{{ secrets_pihole_local_ipv6 }}"
+        pihole_enable_wildcard_lan: true
+        pihole_wildcard_ip: "{{ secrets_private_interface_ip }}"
+        pihole_wildcard_ipv6: "{{ secrets_private_interface_ipv6 | default('') }}"
+        pihole_disable_systemd_resolved: true
+
+    # 7. Network Role - Finalize DNS Routing (re-run to use local Pi-hole)
+    - name: Apply permanent netplan DNS configuration pointing to local Pi-hole (IPv4 & IPv6)
+      ansible.builtin.import_role:
+        name: network
+      vars:
+        network_dns_servers:
+          - "{{ secrets_private_interface_ip }}"
+          - "{{ secrets_private_interface_ipv6 }}"
+
+    # 8. WireGuard VPN Service
+    - name: Provision WireGuard VPN (bound to public interface)
+      ansible.builtin.import_role:
+        name: wireguard
+      vars:
+        wireguard_user: wireguard
+        wireguard_bind_ip: "{{ secrets_public_interface_ip }}"
+        wireguard_port: "{{ secrets_wireguard_port }}"
+        wireguard_server_url: "{{ secrets_wireguard_server_url }}"
+        wireguard_peer_dns: "{{ secrets_private_interface_ip }}"
+        wireguard_allowed_ips: "{{ secrets_wireguard_allowed_ips | default('0.0.0.0/0, ::/0') }}"
+
+    # 9. Vaultwarden Password Manager
+    - name: Provision Vaultwarden
+      ansible.builtin.import_role:
+        name: vaultwarden
+      vars:
+        vaultwarden_user: private
+        vaultwarden_network: private_network
+        vaultwarden_domain: "https://vaultwarden.lan"
+        vaultwarden_admin_password_raw: "{{ secrets_vaultwarden_admin_password }}"
+        vaultwarden_signups_allowed: false
+
+    # 10. Caddy Reverse Proxy
+    - name: Provision Caddy proxy (bound to private interface)
+      ansible.builtin.import_role:
+        name: caddy
+      vars:
+        caddy_user: private
+        caddy_network: private_network
+        caddy_bind_ip: "{{ secrets_private_interface_ip }}"
+        caddy_sites:
+          - domain: "vaultwarden.lan"
+            proxy: "http://vaultwarden:80"
+            raw: |
+              tls internal

@@ -1,0 +1,4 @@
+address=/.lan/{{ pihole_wildcard_ip }}
+{% if pihole_wildcard_ipv6 | default('') != '' %}
+address=/.lan/{{ pihole_wildcard_ipv6 }}
+{% endif %}

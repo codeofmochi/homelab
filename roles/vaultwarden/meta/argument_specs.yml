@@ -38,5 +38,6 @@ argument_specs:
         description: Whether to allow new user signups.
       vaultwarden_admin_token_hash:
         type: str
-        required: true
+        required: false
         description: The PHC Argon2id hash of the admin token used to access the /admin interface.
+

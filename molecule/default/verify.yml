@@ -1,0 +1,130 @@
+---
+- name: Install verification tools on client
+  hosts: client-lan
+  become: true
+  tasks:
+    - name: Install dnsutils and wireguard-tools
+      ansible.builtin.apt:
+        name:
+          - dnsutils
+          - wireguard-tools
+        state: present
+        update_cache: true
+
+- name: Establish WireGuard Tunnel and Trust Store on Client
+  hosts: client-lan
+  become: true
+  tasks:
+    - name: Retrieve Caddy root CA certificate from homelab-server
+      ansible.builtin.slurp:
+        path: /home/private/caddy/data/caddy/pki/authorities/local/root.crt
+      delegate_to: homelab-server
+      register: caddy_root_cert
+
+    - name: Write Caddy root CA certificate to client trusted store
+      ansible.builtin.copy:
+        dest: /usr/local/share/ca-certificates/caddy-root.crt
+        content: "{{ caddy_root_cert.content | b64decode }}"
+        mode: '0644'
+
+    - name: Update system trust store
+      ansible.builtin.command: update-ca-certificates
+      changed_when: true
+
+    - name: Configure resolv.conf on client to point to local Pi-hole
+      ansible.builtin.copy:
+        dest: /etc/resolv.conf
+        content: |
+          nameserver 192.168.56.11
+        mode: '0644'
+
+    - name: Retrieve WireGuard client configuration from server
+      ansible.builtin.slurp:
+        path: /home/wireguard/config/peer_peer1/peer_peer1.conf
+      delegate_to: homelab-server
+      register: wg_client_conf
+
+    - name: Write WireGuard client configuration
+      ansible.builtin.copy:
+        dest: /etc/wireguard/wg0.conf
+        content: "{{ wg_client_conf.content | b64decode }}"
+        mode: '0600'
+
+    - name: Ensure WireGuard tunnel is down
+      ansible.builtin.command: wg-quick down wg0
+      failed_when: false
+      changed_when: false
+
+    - name: Start WireGuard tunnel on client
+      ansible.builtin.command: wg-quick up wg0
+      changed_when: true
+
+- name: Run Host integration verification
+  hosts: homelab-server
+  become: true
+  vars:
+    caddy_user: private
+    vaultwarden_user: private
+    pihole_user: pihole
+    pihole_dns_interface: eth2
+    wireguard_user: wireguard
+    wireguard_bind_ip: 192.168.56.10
+    wireguard_port: 51820
+  tasks:
+    - name: Verify Pi-hole DNS host tasks
+      ansible.builtin.include_role:
+        name: pihole
+        tasks_from: verify.yml
+
+    - name: Verify WireGuard VPN host tasks
+      ansible.builtin.include_role:
+        name: wireguard
+        tasks_from: verify.yml
+
+    - name: Verify Vaultwarden host tasks
+      ansible.builtin.include_role:
+        name: vaultwarden
+        tasks_from: verify.yml
+
+    - name: Verify Caddy Reverse Proxy host tasks
+      ansible.builtin.include_role:
+        name: caddy
+        tasks_from: verify.yml
+
+- name: Run Client LAN integration verification
+  hosts: client-lan
+  become: true
+  vars:
+    pihole_ip: 192.168.56.11
+    target_lan_domain: vaultwarden.lan
+    expected_lan_ip: 192.168.56.11
+    wireguard_tunnel_dns: "10.13.13.1"
+  tasks:
+    - name: Verify wildcard DNS resolution on client
+      ansible.builtin.command: dig @{{ pihole_ip }} anything-random.lan +short
+      register: wildcard_dns_result
+      failed_when: wildcard_dns_result.stdout != expected_lan_ip
+      changed_when: false
+
+    - name: Verify Vaultwarden proxying through Caddy on client
+      ansible.builtin.uri:
+        url: "https://{{ target_lan_domain }}/alive"
+        method: GET
+        status_code: 200
+        validate_certs: true
+      register: caddy_proxy_result
+      until: caddy_proxy_result.status == 200
+      retries: 10
+      delay: 2
+
+    - name: Verify traffic to private network is routed over WireGuard interface
+      ansible.builtin.command: ip route get 192.168.56.11
+      register: route_check
+      failed_when: "'dev wg0' not in route_check.stdout"
+      changed_when: false
+
+    - name: Verify DNS resolution over WireGuard tunnel on client
+      ansible.builtin.command: dig @{{ pihole_ip }} vaultwarden.lan +short
+      register: wg_dns_result
+      failed_when: wg_dns_result.stdout != expected_lan_ip
+      changed_when: false

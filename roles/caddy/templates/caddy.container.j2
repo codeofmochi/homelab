@@ -3,8 +3,13 @@
 ContainerName=caddy
 Image={{ caddy_image }}
 
+{% if caddy_bind_ip | default(false) %}
+PublishPort={{ caddy_bind_ip }}:{{ caddy_http_port }}:80
+PublishPort={{ caddy_bind_ip }}:{{ caddy_https_port }}:443
+{% else %}
 PublishPort={{ caddy_http_port }}:80
 PublishPort={{ caddy_https_port }}:443
+{% endif %}
 
 {% if caddy_network | default(false) %}
 Network={{ caddy_network }}

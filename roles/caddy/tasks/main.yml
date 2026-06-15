@@ -57,8 +57,11 @@
     group: "{{ caddy_user }}"
     mode: '0644'
   notify:
-    - Reload user systemd
+    - Reload user systemd for caddy
     - Restart caddy
+
+- name: Flush handlers to apply configuration/quadlet updates
+  ansible.builtin.meta: flush_handlers
 
 - name: Ensure caddy service is started and enabled
   ansible.builtin.systemd:
@@ -66,7 +69,6 @@
     state: started
     enabled: true
     scope: user
-    daemon_reload: true
   become: true
   become_user: "{{ caddy_user }}"
   environment:

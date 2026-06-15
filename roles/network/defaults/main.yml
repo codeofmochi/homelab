@@ -1,3 +1,4 @@
 ---
 network_interfaces: []
 network_sysctl_settings: {}
+network_dns_servers: []

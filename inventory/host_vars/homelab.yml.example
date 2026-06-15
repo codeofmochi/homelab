@@ -1,0 +1,16 @@
+# Host variables for homelab-server (Production)
+# Place this file in inventory/host_vars/homelab.yml and encrypt it with Ansible Vault:
+#   ansible-vault encrypt inventory/host_vars/homelab.yml
+#
+# To edit the encrypted file:
+#   ansible-vault edit inventory/host_vars/homelab.yml
+
+# SSH connection details
+ansible_host: "192.168.1.50"
+ansible_user: "your_user"
+ansible_port: 22
+
+# System privileges configuration
+ansible_become: true
+ansible_become_method: sudo
+ansible_become_password: "your_vaulted_become_sudo_password_here"

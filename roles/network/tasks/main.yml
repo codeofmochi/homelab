@@ -10,6 +10,17 @@
   become: true
   when: network_sysctl_settings is defined and network_sysctl_settings | length > 0
 
+- name: Configure resolv.conf
+  ansible.builtin.copy:
+    dest: /etc/resolv.conf
+    content: |
+      {% for server in network_dns_servers %}
+      nameserver {{ server }}
+      {% endfor %}
+    mode: '0644'
+  become: true
+  when: network_dns_servers is defined and network_dns_servers | length > 0
+
 - name: Deploy Netplan configuration
   ansible.builtin.template:
     src: netplan.yaml.j2

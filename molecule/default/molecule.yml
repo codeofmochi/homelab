@@ -1,0 +1,47 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: vagrant
+platforms:
+  - name: homelab-server
+    box: bento/ubuntu-24.04
+    memory: 8192
+    cpus: 4
+    config_options:
+      vm.boot_timeout: 600
+    groups:
+      - homelab_servers
+    interfaces:
+      - network_name: private_network
+        ip: 192.168.55.10
+        virtualbox__intnet: "homelab-net"
+      - network_name: private_network
+        ip: 192.168.56.11
+        virtualbox__intnet: "homelab-net"
+      - network_name: private_network
+        ip: 192.168.57.12
+        virtualbox__intnet: "homelab-net"
+  - name: client-lan
+    box: bento/ubuntu-24.04
+    memory: 1024
+    cpus: 1
+    config_options:
+      vm.boot_timeout: 600
+    interfaces:
+      - network_name: private_network
+        ip: 192.168.56.20
+        virtualbox__intnet: "homelab-net"
+provisioner:
+  name: ansible
+  env:
+    VAGRANT_WSL_ENABLE_WINDOWS_ACCESS: "1"
+    ANSIBLE_ROLES_PATH: ../../roles
+  config_options:
+    defaults:
+      roles_path: ../../roles
+  playbooks:
+    prepare: prepare.yml
+    converge: converge.yml
+verifier:
+  name: ansible

@@ -1,0 +1,249 @@
+---
+- name: Install verification tools on client
+  hosts: client-lan
+  become: true
+  tasks:
+    - name: Install dnsutils and wireguard-tools for testing
+      ansible.builtin.apt:
+        name:
+          - dnsutils
+          - wireguard-tools
+        state: present
+        update_cache: true
+
+- name: Configure client interface to use DHCP from Pi-hole
+  hosts: client-lan
+  become: true
+  tasks:
+    - name: Configure client network interface for DHCP and ULA IPv6
+      ansible.builtin.copy:
+        dest: /etc/netplan/00-ansible-network.yaml
+        content: |
+          network:
+            version: 2
+            renderer: networkd
+            ethernets:
+              eth1:
+                dhcp4: true
+                addresses:
+                  - "fd00:abcd::20/64"
+        mode: '0600'
+
+    - name: Remove Vagrant static network configuration
+      ansible.builtin.file:
+        path: /etc/netplan/50-vagrant.yaml
+        state: absent
+
+    - name: Apply Netplan
+      ansible.builtin.command: netplan apply
+      changed_when: true
+
+    - name: Wait for client interface to obtain DHCP IP from Pi-hole
+      ansible.builtin.command: ip addr show eth1
+      register: ip_show_output
+      until: ip_show_output.stdout is search('192\\.168\\.56\\.(1[0-9][0-9]|200)')
+      retries: 30
+      delay: 2
+      changed_when: false
+
+- name: Trust Caddy Root certificate on client VM
+  hosts: client-lan
+  become: true
+  tasks:
+    - name: Retrieve Caddy root CA certificate from homelab-server
+      ansible.builtin.slurp:
+        path: /home/private/caddy/data/caddy/pki/authorities/local/root.crt
+      delegate_to: homelab-server
+      register: caddy_root_cert
+
+    - name: Write Caddy root CA certificate to client trusted store
+      ansible.builtin.copy:
+        dest: /usr/local/share/ca-certificates/caddy-root.crt
+        content: "{{ caddy_root_cert.content | b64decode }}"
+        mode: '0644'
+
+    - name: Update system trust store
+      ansible.builtin.command: update-ca-certificates
+      changed_when: true
+
+
+- name: Run Host integration verification
+  hosts: homelab-server
+  become: true
+  vars:
+    caddy_user: private
+    vaultwarden_user: private
+    pihole_user: pihole
+    pihole_dns_interface: eth2
+    pihole_verify_ip: 127.0.0.1
+    pihole_verify_ipv6: ::1
+    wireguard_user: wireguard
+    wireguard_bind_ip: 192.168.56.10
+    wireguard_port: 51820
+  tasks:
+    - name: Verify Pi-hole DNS host tasks
+      ansible.builtin.include_role:
+        name: pihole
+        tasks_from: verify.yml
+
+    - name: Verify WireGuard VPN host tasks
+      ansible.builtin.include_role:
+        name: wireguard
+        tasks_from: verify.yml
+
+    - name: Verify Vaultwarden host tasks
+      ansible.builtin.include_role:
+        name: vaultwarden
+        tasks_from: verify.yml
+
+    - name: Verify Caddy Reverse Proxy host tasks
+      ansible.builtin.include_role:
+        name: caddy
+        tasks_from: verify.yml
+
+
+- name: Run Client LAN integration verification (DHCP & Shared Assertions)
+  hosts: client-lan
+  become: true
+  vars:
+    pihole_ip: 192.168.56.11
+    pihole_ipv6: fd00:abcd::11
+    target_lan_domain: vaultwarden.lan
+    target_lan_ipv6_domain: vaultwarden.lan
+    expected_lan_ip: 192.168.56.11
+    expected_lan_ipv6: fd00:abcd::11
+  tasks:
+    - name: Run shared Pi-hole client verification tasks
+      ansible.builtin.include_role:
+        name: pihole
+        tasks_from: verify_client.yml
+
+    - name: Verify wildcard DNS resolution on client
+      ansible.builtin.command: dig @{{ pihole_ip }} anything-random.lan +short
+      register: wildcard_dns_result
+      failed_when: wildcard_dns_result.stdout != expected_lan_ip
+      changed_when: false
+
+    - name: Verify Vaultwarden proxying through Caddy on client
+      ansible.builtin.uri:
+        url: "https://{{ target_lan_domain }}/alive"
+        method: GET
+        status_code: 200
+        validate_certs: true
+      register: caddy_proxy_result
+      until: caddy_proxy_result.status == 200
+      retries: 10
+      delay: 2
+
+
+- name: Run end-to-end WireGuard client handshake & routing verification
+  hosts: client-lan
+  become: true
+  vars:
+    wireguard_client_interface: wg-molecule
+    wireguard_client_config_path: "/tmp/wg-molecule.conf"
+    wireguard_server_vpn_ip: "10.13.13.1"
+    expected_lan_ip: "192.168.56.11"
+  tasks:
+    - name: Slurp peer1 config from homelab-server
+      ansible.builtin.slurp:
+        path: "/home/wireguard/config/peer1/peer1.conf"
+      delegate_to: homelab-server
+      register: wireguard_peer1_conf
+
+    - name: Retrieve wireguard user UID on server
+      ansible.builtin.command: id -u wireguard
+      delegate_to: homelab-server
+      register: wg_server_uid
+      changed_when: false
+
+    - name: Install peer configuration on client (split-tunneling DNS check)
+      ansible.builtin.copy:
+        dest: "{{ wireguard_client_config_path }}"
+        mode: '0600'
+        content: >-
+          {{
+            wireguard_peer1_conf.content
+            | b64decode
+            | regex_replace('DNS *= *[0-9.,]+', '')
+            | regex_replace('AllowedIPs *= *[0-9.,/]+', 'AllowedIPs = 10.13.13.0/24')
+          }}
+
+    - name: Ensure test interface is absent before handshake check
+      ansible.builtin.command: "wg-quick down {{ wireguard_client_config_path }}"
+      failed_when: false
+      changed_when: false
+
+    - name: Bring up WireGuard client interface
+      ansible.builtin.command: "wg-quick up {{ wireguard_client_config_path }}"
+      register: wireguard_client_up
+      changed_when: wireguard_client_up.rc == 0
+
+    - name: Wait for WireGuard client interface to exist
+      ansible.builtin.command: "ip addr show {{ wireguard_client_interface }}"
+      register: wireguard_client_interface_output
+      changed_when: false
+      retries: 5
+      delay: 2
+      until: wireguard_client_interface_output.rc == 0
+
+    - name: Ping WireGuard server over tunnel
+      ansible.builtin.command: "ping -c 3 -W 2 {{ wireguard_server_vpn_ip }}"
+      register: wireguard_client_ping
+      failed_when: wireguard_client_ping.rc != 0
+      changed_when: false
+
+    - name: Verify routing of VPN IP through WireGuard tunnel
+      ansible.builtin.command: ip route get {{ wireguard_server_vpn_ip }}
+      register: route_check
+      failed_when: "'wg-molecule' not in route_check.stdout"
+      changed_when: false
+
+    - name: Verify split-tunnel DNS resolution over WireGuard tunnel
+      ansible.builtin.command: "dig @{{ expected_lan_ip }} vaultwarden.lan +short"
+      register: wg_dns_result
+      failed_when: wg_dns_result.stdout != expected_lan_ip
+      changed_when: false
+
+    - name: Wait for latest handshake on client
+      ansible.builtin.command: "wg show {{ wireguard_client_interface }} latest-handshakes"
+      register: wireguard_client_handshake
+      changed_when: false
+      retries: 5
+      delay: 2
+      until:
+        - (wireguard_client_handshake.stdout.split() | length) >= 2
+        - (wireguard_client_handshake.stdout.split()[1] | int) > 0
+
+    - name: Wait for latest handshake on server
+      ansible.builtin.command: "podman exec wireguard wg show wg0 latest-handshakes"
+      delegate_to: homelab-server
+      become: true
+      become_user: wireguard
+      environment:
+        XDG_RUNTIME_DIR: "/run/user/{{ wg_server_uid.stdout }}"
+      register: wireguard_server_handshake
+      changed_when: false
+      retries: 5
+      delay: 2
+      until:
+        - (wireguard_server_handshake.stdout.split() | length) >= 2
+        - (wireguard_server_handshake.stdout.split()[1] | int) > 0
+
+    - name: Assert client established a WireGuard session
+      ansible.builtin.assert:
+        that:
+          - (wireguard_client_handshake.stdout.split() | length) >= 2
+          - (wireguard_client_handshake.stdout.split()[1] | int) > 0
+          - (wireguard_server_handshake.stdout.split() | length) >= 2
+          - (wireguard_server_handshake.stdout.split()[1] | int) > 0
+
+    - name: Bring down WireGuard client interface
+      ansible.builtin.command: "wg-quick down {{ wireguard_client_config_path }}"
+      failed_when: false
+      changed_when: false
+
+    - name: Remove temporary client configuration
+      ansible.builtin.file:
+        path: "{{ wireguard_client_config_path }}"
+        state: absent

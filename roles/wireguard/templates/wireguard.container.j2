@@ -28,7 +28,11 @@ Volume={{ wireguard_data_dir }}:/config:Z
 AddDevice=/dev/net/tun:/dev/net/tun
 
 # Networking
+{% if wireguard_bind_ip | default(false) %}
+PublishPort={{ wireguard_bind_ip }}:{{ wireguard_port }}:51820/udp
+{% else %}
 PublishPort={{ wireguard_port }}:51820/udp
+{% endif %}
 
 [Install]
 WantedBy=default.target

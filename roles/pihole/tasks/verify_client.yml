@@ -1,0 +1,30 @@
+---
+- name: Verify ad DNS blocking from client
+  ansible.builtin.command: "dig @{{ pihole_ip | default('192.168.56.10') }} pagead2.googlesyndication.com +short"
+  register: block_check_client
+  failed_when: block_check_client.stdout != "0.0.0.0"
+  changed_when: false
+
+- name: Verify ad DNS blocking from client (IPv6)
+  ansible.builtin.command: "dig @{{ pihole_ipv6 | default('fd00:dead:beef::10') }} pagead2.googlesyndication.com +short"
+  register: block_check_client_ipv6
+  failed_when: block_check_client_ipv6.stdout != "0.0.0.0"
+  changed_when: false
+
+- name: Verify ad DNS blocking from client (AAAA query resolves to ::)
+  ansible.builtin.command: "dig @{{ pihole_ipv6 | default('fd00:dead:beef::10') }} pagead2.googlesyndication.com AAAA +short"
+  register: block_check_client_aaaa
+  failed_when: block_check_client_aaaa.stdout != "::"
+  changed_when: false
+
+- name: Verify local domain resolution from client
+  ansible.builtin.command: "dig @{{ pihole_ip | default('192.168.56.10') }} {{ target_lan_domain | default('test.local') }} +short"
+  register: local_check_client
+  failed_when: local_check_client.stdout != (expected_lan_ip | default('192.168.56.150'))
+  changed_when: false
+
+- name: Verify local IPv6 domain resolution from client (AAAA)
+  ansible.builtin.command: "dig @{{ pihole_ipv6 | default('fd00:dead:beef::10') }} {{ target_lan_ipv6_domain | default('ipv6-test.local') }} AAAA +short"
+  register: local_ipv6_check_client
+  failed_when: local_ipv6_check_client.stdout != (expected_lan_ipv6 | default('fd00:dead:beef::150'))
+  changed_when: false

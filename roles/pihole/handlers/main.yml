@@ -1,6 +1,6 @@
 ---
 # handlers file for pihole
-- name: Reload user systemd
+- name: Reload user systemd for pihole
   ansible.builtin.systemd:
     daemon_reload: true
     scope: user

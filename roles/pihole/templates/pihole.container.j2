@@ -15,6 +15,12 @@ Environment="FTLCONF_misc_etc_dnsmasq_d=true"
 {% if pihole_local_ipv6 | default('') != '' %}
 Environment="FTLCONF_LOCAL_IPV6={{ pihole_local_ipv6 }}"
 {% endif %}
+{% if pihole_dns_listening_mode | default('') != '' %}
+Environment="FTLCONF_dns_listeningMode={{ pihole_dns_listening_mode }}"
+{% endif %}
+{% if pihole_dns_interface | default('') != '' %}
+Environment="FTLCONF_dns_interface={{ pihole_dns_interface }}"
+{% endif %}
 
 {% if pihole_local_domains | length > 0 %}
 {% set hosts_list = [] %}

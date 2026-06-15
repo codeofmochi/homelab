@@ -28,7 +28,22 @@ argument_specs:
             elements: "str"
             required: false
             description: "List of DNS nameserver IP addresses."
+          routes:
+            type: "list"
+            elements: "dict"
+            required: false
+            description: "List of custom routes for this interface."
+          routing_policy:
+            type: "list"
+            elements: "dict"
+            required: false
+            description: "List of routing policy rules for this interface."
       network_sysctl_settings:
         type: "dict"
         required: false
         description: "Dictionary of sysctl settings to apply (e.g., net.ipv4.ip_forward: 1)."
+      network_dns_servers:
+        type: "list"
+        elements: "str"
+        required: false
+        description: "List of DNS nameserver IP addresses to write to /etc/resolv.conf."

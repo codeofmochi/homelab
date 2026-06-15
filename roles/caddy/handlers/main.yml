@@ -1,7 +1,7 @@
 ---
 # handlers file for caddy
 
-- name: Reload user systemd
+- name: Reload user systemd for caddy
   ansible.builtin.systemd:
     daemon_reload: true
     scope: user

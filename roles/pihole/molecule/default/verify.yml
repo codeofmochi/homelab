@@ -12,56 +12,13 @@
 - name: Verify pihole-host status before reboot
   hosts: pihole-host
   become: true
+  vars:
+    pihole_user: pihole
   tasks:
-    - name: Get pihole user UID
-      ansible.builtin.command: "id -u pihole"
-      register: user_id
-      changed_when: false
-
-    - name: Ensure pihole systemd service is running
-      ansible.builtin.systemd:
-        name: pihole.service
-        scope: user
-      register: service_status
-      become: true
-      become_user: pihole
-      environment:
-        XDG_RUNTIME_DIR: "/run/user/{{ user_id.stdout }}"
-      failed_when: not service_status.status.ActiveState == 'active'
-
-    - name: Check if pihole container is running via podman
-      ansible.builtin.command: podman ps --filter "name=pihole" --format "{% raw %}{{.Status}}{% endraw %}"
-      register: podman_status
-      become: true
-      become_user: pihole
-      changed_when: false
-      environment:
-        XDG_RUNTIME_DIR: "/run/user/{{ user_id.stdout }}"
-      failed_when: "'Up' not in podman_status.stdout"
-
-    - name: Verify ad DNS blocking from host
-      ansible.builtin.command: dig @127.0.0.1 pagead2.googlesyndication.com +short
-      register: block_check_host
-      failed_when: block_check_host.stdout != "0.0.0.0"
-      changed_when: false
-
-    - name: Verify ad DNS blocking from host (IPv6 loopback)
-      ansible.builtin.command: dig @::1 pagead2.googlesyndication.com +short
-      register: block_check_host_ipv6
-      failed_when: block_check_host_ipv6.stdout != "0.0.0.0"
-      changed_when: false
-
-    - name: Verify ad DNS blocking from host (IPv6 static IP)
-      ansible.builtin.command: dig @fd00:dead:beef::10 pagead2.googlesyndication.com +short
-      register: block_check_host_static_ipv6
-      failed_when: block_check_host_static_ipv6.stdout != "0.0.0.0"
-      changed_when: false
-
-    - name: Verify ad DNS blocking from host (AAAA query resolves to ::)
-      ansible.builtin.command: dig @127.0.0.1 pagead2.googlesyndication.com AAAA +short
-      register: block_check_host_aaaa
-      failed_when: block_check_host_aaaa.stdout != "::"
-      changed_when: false
+    - name: Run shared Pi-hole host verification tasks
+      ansible.builtin.include_role:
+        name: pihole
+        tasks_from: verify.yml
 
 - name: Verify DHCP and DNS on client-host before reboot
   hosts: client-host
@@ -97,35 +54,10 @@
       delay: 2
       changed_when: false
 
-    - name: Verify ad DNS blocking from client
-      ansible.builtin.command: dig @192.168.56.10 pagead2.googlesyndication.com +short
-      register: block_check_client
-      failed_when: block_check_client.stdout != "0.0.0.0"
-      changed_when: false
-
-    - name: Verify ad DNS blocking from client (IPv6)
-      ansible.builtin.command: dig @fd00:dead:beef::10 pagead2.googlesyndication.com +short
-      register: block_check_client_ipv6
-      failed_when: block_check_client_ipv6.stdout != "0.0.0.0"
-      changed_when: false
-
-    - name: Verify ad DNS blocking from client (AAAA query resolves to ::)
-      ansible.builtin.command: dig @fd00:dead:beef::10 pagead2.googlesyndication.com AAAA +short
-      register: block_check_client_aaaa
-      failed_when: block_check_client_aaaa.stdout != "::"
-      changed_when: false
-
-    - name: Verify local domain resolution from client
-      ansible.builtin.command: dig @192.168.56.10 test.local +short
-      register: local_check_client
-      failed_when: local_check_client.stdout != "192.168.56.150"
-      changed_when: false
-
-    - name: Verify local IPv6 domain resolution from client (AAAA)
-      ansible.builtin.command: dig @fd00:dead:beef::10 ipv6-test.local AAAA +short
-      register: local_ipv6_check_client
-      failed_when: local_ipv6_check_client.stdout != "fd00:dead:beef::150"
-      changed_when: false
+    - name: Run shared Pi-hole client verification tasks
+      ansible.builtin.include_role:
+        name: pihole
+        tasks_from: verify_client.yml
 
 - name: Reboot hosts
   hosts: all
@@ -137,50 +69,13 @@
 - name: Verify pihole-host status after reboot
   hosts: pihole-host
   become: true
+  vars:
+    pihole_user: pihole
   tasks:
-    - name: Get pihole user UID after reboot
-      ansible.builtin.command: "id -u pihole"
-      register: user_id_post
-      changed_when: false
-
-    - name: Ensure pihole systemd service is running after reboot
-      ansible.builtin.systemd:
-        name: pihole.service
-        scope: user
-      register: service_status_post
-      become: true
-      become_user: pihole
-      environment:
-        XDG_RUNTIME_DIR: "/run/user/{{ user_id_post.stdout }}"
-      failed_when: not service_status_post.status.ActiveState == 'active'
-
-    - name: Check if pihole container is running via podman after reboot
-      ansible.builtin.command: podman ps --filter "name=pihole" --format "{% raw %}{{.Status}}{% endraw %}"
-      register: podman_status_post
-      become: true
-      become_user: pihole
-      changed_when: false
-      environment:
-        XDG_RUNTIME_DIR: "/run/user/{{ user_id_post.stdout }}"
-      failed_when: "'Up' not in podman_status_post.stdout"
-
-    - name: Verify ad DNS blocking from host after reboot
-      ansible.builtin.command: dig @127.0.0.1 pagead2.googlesyndication.com +short
-      register: block_check_host_post
-      failed_when: block_check_host_post.stdout != "0.0.0.0"
-      changed_when: false
-
-    - name: Verify ad DNS blocking from host after reboot (IPv6 loopback)
-      ansible.builtin.command: dig @::1 pagead2.googlesyndication.com +short
-      register: block_check_host_ipv6_post
-      failed_when: block_check_host_ipv6_post.stdout != "0.0.0.0"
-      changed_when: false
-
-    - name: Verify ad DNS blocking from host after reboot (AAAA query resolves to ::)
-      ansible.builtin.command: dig @127.0.0.1 pagead2.googlesyndication.com AAAA +short
-      register: block_check_host_aaaa_post
-      failed_when: block_check_host_aaaa_post.stdout != "::"
-      changed_when: false
+    - name: Run shared Pi-hole host verification tasks after reboot
+      ansible.builtin.include_role:
+        name: pihole
+        tasks_from: verify.yml
 
 - name: Verify DHCP and DNS on client-host after reboot
   hosts: client-host
@@ -194,32 +89,7 @@
       delay: 2
       changed_when: false
 
-    - name: Verify ad DNS blocking from client after reboot
-      ansible.builtin.command: dig @192.168.56.10 pagead2.googlesyndication.com +short
-      register: block_check_client_post
-      failed_when: block_check_client_post.stdout != "0.0.0.0"
-      changed_when: false
-
-    - name: Verify ad DNS blocking from client after reboot (IPv6)
-      ansible.builtin.command: dig @fd00:dead:beef::10 pagead2.googlesyndication.com +short
-      register: block_check_client_ipv6_post
-      failed_when: block_check_client_ipv6_post.stdout != "0.0.0.0"
-      changed_when: false
-
-    - name: Verify ad DNS blocking from client after reboot (AAAA query resolves to ::)
-      ansible.builtin.command: dig @fd00:dead:beef::10 pagead2.googlesyndication.com AAAA +short
-      register: block_check_client_aaaa_post
-      failed_when: block_check_client_aaaa_post.stdout != "::"
-      changed_when: false
-
-    - name: Verify local domain resolution from client after reboot
-      ansible.builtin.command: dig @192.168.56.10 test.local +short
-      register: local_check_client_post
-      failed_when: local_check_client_post.stdout != "192.168.56.150"
-      changed_when: false
-
-    - name: Verify local IPv6 domain resolution from client after reboot (AAAA)
-      ansible.builtin.command: dig @fd00:dead:beef::10 ipv6-test.local AAAA +short
-      register: local_ipv6_check_client_post
-      failed_when: local_ipv6_check_client_post.stdout != "fd00:dead:beef::150"
-      changed_when: false
+    - name: Run shared Pi-hole client verification tasks after reboot
+      ansible.builtin.include_role:
+        name: pihole
+        tasks_from: verify_client.yml

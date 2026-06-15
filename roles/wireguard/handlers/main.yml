@@ -1,5 +1,5 @@
 ---
-- name: Reload user systemd
+- name: Reload user systemd for wireguard
   ansible.builtin.systemd:
     daemon_reload: true
     scope: user

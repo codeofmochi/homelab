@@ -8,29 +8,10 @@
     vaultwarden_domain: http://{{ vaultwarden_bind_ip }}:{{ vaultwarden_bind_port }}/
     vaultwarden_user: vaultwarden
   tasks:
-    - name: Get vaultwarden user UID
-      ansible.builtin.command: "id -u {{ vaultwarden_user }}"
-      register: user_id
-      changed_when: false
-
-    - name: Ensure vaultwarden service is running
-      ansible.builtin.systemd:
-        name: vaultwarden.service
-        scope: user
-      register: service_status
-      become: true
-      become_user: "{{ vaultwarden_user }}"
-      environment:
-        XDG_RUNTIME_DIR: "/run/user/{{ user_id.stdout }}"
-      failed_when: not service_status.status.ActiveState == 'active'
-
-    - name: Check if vaultwarden container is running via podman
-      ansible.builtin.command: podman ps --filter "name=vaultwarden" --format "{% raw %}{{.Status}}{% endraw %}"
-      register: podman_status
-      become: true
-      become_user: "{{ vaultwarden_user }}"
-      changed_when: false
-      failed_when: "'Up' not in podman_status.stdout"
+    - name: Run shared Vaultwarden verification tasks
+      ansible.builtin.include_role:
+        name: vaultwarden
+        tasks_from: verify.yml
 
     - name: Wait for vaultwarden healthcheck endpoint
       ansible.builtin.uri:
@@ -46,29 +27,10 @@
       ansible.builtin.reboot:
       become: true
 
-    - name: Get vaultwarden user UID after reboot
-      ansible.builtin.command: "id -u {{ vaultwarden_user }}"
-      register: user_id_post
-      changed_when: false
-
-    - name: Ensure vaultwarden service is running after reboot
-      ansible.builtin.systemd:
-        name: vaultwarden.service
-        scope: user
-      register: service_status_post
-      become: true
-      become_user: "{{ vaultwarden_user }}"
-      environment:
-        XDG_RUNTIME_DIR: "/run/user/{{ user_id_post.stdout }}"
-      failed_when: not service_status_post.status.ActiveState == 'active'
-
-    - name: Check if vaultwarden container is running via podman after reboot
-      ansible.builtin.command: podman ps --filter "name=vaultwarden" --format "{% raw %}{{.Status}}{% endraw %}"
-      register: podman_status_post
-      become: true
-      become_user: "{{ vaultwarden_user }}"
-      changed_when: false
-      failed_when: "'Up' not in podman_status_post.stdout"
+    - name: Run shared Vaultwarden verification tasks after reboot
+      ansible.builtin.include_role:
+        name: vaultwarden
+        tasks_from: verify.yml
 
     - name: Verify healthcheck after reboot
       ansible.builtin.uri:

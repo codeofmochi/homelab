@@ -26,6 +26,47 @@
   ansible.builtin.set_fact:
     vaultwarden_uid: "{{ getent_passwd[vaultwarden_user][1] }}"
 
+- name: Check if vaultwarden container file exists
+  ansible.builtin.stat:
+    path: "/home/{{ vaultwarden_user }}/.config/containers/systemd/vaultwarden.container"
+  register: vaultwarden_container_stat
+
+- name: Extract existing Argon2id hash from container file
+  ansible.builtin.shell: |
+    grep -oP 'Environment=ADMIN_TOKEN=\K.*' "/home/{{ vaultwarden_user }}/.config/containers/systemd/vaultwarden.container"
+  register: existing_vaultwarden_hash
+  changed_when: false
+  failed_when: false
+  when: vaultwarden_container_stat.stat.exists
+
+- name: Set vaultwarden admin token hash from existing file
+  ansible.builtin.set_fact:
+    vaultwarden_admin_token_hash: "{{ existing_vaultwarden_hash.stdout }}"
+  when:
+    - vaultwarden_container_stat.stat.exists
+    - existing_vaultwarden_hash.rc == 0
+    - existing_vaultwarden_hash.stdout != ""
+
+- name: Hash Vaultwarden admin password locally on control node
+  block:
+    - name: Generate Argon2id hash using alpine container locally
+      ansible.builtin.shell: |
+        salt=$(openssl rand -hex 8)
+        podman run --rm -i alpine sh -c "apk add --no-cache argon2 >/dev/null && argon2 $salt -id -m 16 -t 3 -p 4"
+      args:
+        stdin: "{{ vaultwarden_admin_password_raw }}"
+      register: vaultwarden_hash_cmd
+      changed_when: false
+      delegate_to: localhost
+
+    - name: Extract admin token hash fact
+      ansible.builtin.set_fact:
+        vaultwarden_admin_token_hash: "{{ vaultwarden_hash_cmd.stdout | regex_search('\\$argon2id\\$.*') }}"
+  become: false
+  when:
+    - vaultwarden_admin_token_hash is not defined or vaultwarden_admin_token_hash == ""
+    - vaultwarden_admin_password_raw is defined and vaultwarden_admin_password_raw != ""
+
 - name: Ensure directories exist
   ansible.builtin.file:
     path: "{{ item }}"
@@ -44,8 +85,11 @@
     group: "{{ vaultwarden_user }}"
     mode: '0644'
   notify:
-    - Reload user systemd
+    - Reload user systemd for vaultwarden
     - Restart vaultwarden
+
+- name: Flush handlers to apply configuration/quadlet updates
+  ansible.builtin.meta: flush_handlers
 
 - name: Ensure vaultwarden service is started and enabled
   ansible.builtin.systemd:
@@ -53,7 +97,6 @@
     state: started
     enabled: true
     scope: user
-    daemon_reload: true
   become: true
   become_user: "{{ vaultwarden_user }}"
   environment:

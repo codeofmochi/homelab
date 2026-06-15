@@ -43,3 +43,9 @@
   register: block_check_host_ipv6
   failed_when: block_check_host_ipv6.stdout != "0.0.0.0"
   changed_when: false
+
+- name: Verify ad DNS blocking from host (AAAA query resolves to ::)
+  ansible.builtin.command: "dig @{{ pihole_verify_ipv6 | default('::1') }} pagead2.googlesyndication.com AAAA +short"
+  register: block_check_host_aaaa
+  failed_when: block_check_host_aaaa.stdout != "::"
+  changed_when: false

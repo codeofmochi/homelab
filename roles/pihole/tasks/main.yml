@@ -94,72 +94,74 @@
   loop: "{{ pihole_dirs_stat.results }}"
   when: not item.stat.exists
 
-- name: Template local DNS custom.list to temp path
+- name: Template local DNS custom.list to volume cache
   ansible.builtin.template:
     src: custom.list.j2
-    dest: "/home/{{ pihole_user }}/pihole_tmp_custom.list"
+    dest: "/home/{{ pihole_user }}/pihole/.custom.list.ansible_cache"
+    mode: '0644'
+    owner: "{{ pihole_user }}"
+    group: "{{ pihole_user }}"
+  become: true
+  register: custom_list_cache
+
+- name: Copy custom.list cache to active configuration
+  ansible.builtin.copy:
+    src: "/home/{{ pihole_user }}/pihole/.custom.list.ansible_cache"
+    dest: "/home/{{ pihole_user }}/pihole/etc-pihole/hosts/custom.list"
+    remote_src: true
     mode: '0644'
   become: true
-  become_user: "{{ pihole_user }}"
-  register: custom_list_temp
-
-- name: Check if custom.list exists in volume
-  ansible.builtin.stat:
-    path: "/home/{{ pihole_user }}/pihole/etc-pihole/hosts/custom.list"
-  register: custom_list_dest
-
-- name: Copy custom.list into volume using podman unshare
-  ansible.builtin.command:
-    cmd: "podman unshare cp /home/{{ pihole_user }}/pihole_tmp_custom.list /home/{{ pihole_user }}/pihole/etc-pihole/hosts/custom.list"
-  become: true
-  become_user: "{{ pihole_user }}"
-  environment:
-    XDG_RUNTIME_DIR: "/run/user/{{ pihole_uid }}"
-  when: custom_list_temp.changed or not custom_list_dest.stat.exists
+  when: custom_list_cache.changed
   notify: Restart pihole
 
-- name: Set ownership of custom.list using podman unshare
+- name: Set host owner of custom.list to pihole user
+  ansible.builtin.file:
+    path: "/home/{{ pihole_user }}/pihole/etc-pihole/hosts/custom.list"
+    owner: "{{ pihole_user }}"
+    group: "{{ pihole_user }}"
+  become: true
+  when: custom_list_cache.changed
+
+- name: Set container owner of custom.list using podman unshare
   ansible.builtin.command:
     cmd: "podman unshare chown 1000:1000 /home/{{ pihole_user }}/pihole/etc-pihole/hosts/custom.list"
   become: true
   become_user: "{{ pihole_user }}"
   environment:
     XDG_RUNTIME_DIR: "/run/user/{{ pihole_uid }}"
-  when: custom_list_temp.changed or not custom_list_dest.stat.exists
+  when: custom_list_cache.changed
 
-- name: Template static DHCP leases to temp path
+- name: Template static DHCP leases directly to volume
   ansible.builtin.template:
     src: 05-custom-static-dhcp.conf.j2
-    dest: "/home/{{ pihole_user }}/pihole_tmp_05-custom-static-dhcp.conf"
+    dest: "/home/{{ pihole_user }}/pihole/etc-dnsmasq.d/05-custom-static-dhcp.conf"
     mode: '0644'
   become: true
-  become_user: "{{ pihole_user }}"
-  register: dhcp_conf_temp
+  register: dhcp_conf_volume
   when: pihole_dhcp_enabled | bool
-
-- name: Check if static DHCP lease file exists in volume
-  ansible.builtin.stat:
-    path: "/home/{{ pihole_user }}/pihole/etc-dnsmasq.d/05-custom-static-dhcp.conf"
-  register: dhcp_conf_dest
-
-- name: Copy static DHCP leases into volume using podman unshare
-  ansible.builtin.command:
-    cmd: "podman unshare cp /home/{{ pihole_user }}/pihole_tmp_05-custom-static-dhcp.conf /home/{{ pihole_user }}/pihole/etc-dnsmasq.d/05-custom-static-dhcp.conf"
-  become: true
-  become_user: "{{ pihole_user }}"
-  environment:
-    XDG_RUNTIME_DIR: "/run/user/{{ pihole_uid }}"
-  when: pihole_dhcp_enabled | bool and (dhcp_conf_temp.changed or not dhcp_conf_dest.stat.exists)
   notify: Restart pihole
 
-- name: Set ownership of static DHCP leases using podman unshare
+- name: Set host owner of DHCP leases to pihole user
+  ansible.builtin.file:
+    path: "/home/{{ pihole_user }}/pihole/etc-dnsmasq.d/05-custom-static-dhcp.conf"
+    owner: "{{ pihole_user }}"
+    group: "{{ pihole_user }}"
+  become: true
+  when: pihole_dhcp_enabled | bool and dhcp_conf_volume.changed
+
+- name: Set container owner of DHCP leases using podman unshare
   ansible.builtin.command:
     cmd: "podman unshare chown 1000:1000 /home/{{ pihole_user }}/pihole/etc-dnsmasq.d/05-custom-static-dhcp.conf"
   become: true
   become_user: "{{ pihole_user }}"
   environment:
     XDG_RUNTIME_DIR: "/run/user/{{ pihole_uid }}"
-  when: pihole_dhcp_enabled | bool and (dhcp_conf_temp.changed or not dhcp_conf_dest.stat.exists)
+  when: pihole_dhcp_enabled | bool and dhcp_conf_volume.changed
+
+- name: Check if static DHCP lease file exists in volume
+  ansible.builtin.stat:
+    path: "/home/{{ pihole_user }}/pihole/etc-dnsmasq.d/05-custom-static-dhcp.conf"
+  register: dhcp_conf_dest
 
 - name: Remove static DHCP leases if DHCP disabled
   ansible.builtin.command:
@@ -171,47 +173,57 @@
   when: not (pihole_dhcp_enabled | bool) and dhcp_conf_dest.stat.exists
   notify: Restart pihole
 
-- name: Remove temp static DHCP lease file if DHCP disabled
-  ansible.builtin.file:
-    path: "/home/{{ pihole_user }}/pihole_tmp_05-custom-static-dhcp.conf"
-    state: absent
-  become: true
-  become_user: "{{ pihole_user }}"
-  when: not (pihole_dhcp_enabled | bool)
-
-- name: Template wildcard DNS conf to temp path
+- name: Template wildcard DNS conf directly to volume
   ansible.builtin.template:
     src: 99-wildcards.conf.j2
-    dest: "/home/{{ pihole_user }}/pihole_tmp_99-wildcards.conf"
+    dest: "/home/{{ pihole_user }}/pihole/etc-dnsmasq.d/99-wildcards.conf"
     mode: '0644'
   become: true
-  become_user: "{{ pihole_user }}"
-  register: wildcard_conf_temp
+  register: wildcard_conf_volume
   when: pihole_enable_wildcard_lan | default(false) | bool
-
-- name: Check if wildcard DNS conf exists in volume
-  ansible.builtin.stat:
-    path: "/home/{{ pihole_user }}/pihole/etc-dnsmasq.d/99-wildcards.conf"
-  register: wildcard_conf_dest
-
-- name: Copy wildcard DNS conf into volume using podman unshare
-  ansible.builtin.command:
-    cmd: "podman unshare cp /home/{{ pihole_user }}/pihole_tmp_99-wildcards.conf /home/{{ pihole_user }}/pihole/etc-dnsmasq.d/99-wildcards.conf"
-  become: true
-  become_user: "{{ pihole_user }}"
-  environment:
-    XDG_RUNTIME_DIR: "/run/user/{{ pihole_uid }}"
-  when: (pihole_enable_wildcard_lan | default(false) | bool) and (wildcard_conf_temp.changed or not wildcard_conf_dest.stat.exists)
   notify: Restart pihole
 
-- name: Set ownership of wildcard DNS conf using podman unshare
+- name: Set host owner of wildcard DNS conf to pihole user
+  ansible.builtin.file:
+    path: "/home/{{ pihole_user }}/pihole/etc-dnsmasq.d/99-wildcards.conf"
+    owner: "{{ pihole_user }}"
+    group: "{{ pihole_user }}"
+  become: true
+  when: (pihole_enable_wildcard_lan | default(false) | bool) and wildcard_conf_volume.changed
+
+- name: Set container owner of wildcard DNS conf using podman unshare
   ansible.builtin.command:
     cmd: "podman unshare chown 1000:1000 /home/{{ pihole_user }}/pihole/etc-dnsmasq.d/99-wildcards.conf"
   become: true
   become_user: "{{ pihole_user }}"
   environment:
     XDG_RUNTIME_DIR: "/run/user/{{ pihole_uid }}"
-  when: (pihole_enable_wildcard_lan | default(false) | bool) and (wildcard_conf_temp.changed or not wildcard_conf_dest.stat.exists)
+  when: (pihole_enable_wildcard_lan | default(false) | bool) and wildcard_conf_volume.changed
+
+- name: Check if wildcard DNS conf exists in volume
+  ansible.builtin.stat:
+    path: "/home/{{ pihole_user }}/pihole/etc-dnsmasq.d/99-wildcards.conf"
+  register: wildcard_conf_dest
+
+- name: Remove wildcard DNS conf if disabled
+  ansible.builtin.command:
+    cmd: "podman unshare rm -f /home/{{ pihole_user }}/pihole/etc-dnsmasq.d/99-wildcards.conf"
+  become: true
+  become_user: "{{ pihole_user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ pihole_uid }}"
+  when: not (pihole_enable_wildcard_lan | default(false) | bool) and wildcard_conf_dest.stat.exists
+  notify: Restart pihole
+
+- name: Clean up any legacy host temp files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/home/{{ pihole_user }}/pihole_tmp_custom.list"
+    - "/home/{{ pihole_user }}/pihole_tmp_05-custom-static-dhcp.conf"
+    - "/home/{{ pihole_user }}/pihole_tmp_99-wildcards.conf"
+  become: true
 
 - name: Ensure podman systemd quadlet directory exists
   ansible.builtin.file:

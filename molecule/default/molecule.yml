@@ -14,11 +14,14 @@ platforms:
       - homelab_servers
     interfaces:
       - network_name: private_network
-        ip: 192.168.56.10  # WAN Interface (within VirtualBox Host-Only range)
+        ip: 192.168.55.10
+        virtualbox__intnet: "public-net"
       - network_name: private_network
-        ip: 192.168.56.11  # LAN Interface (within VirtualBox Host-Only range)
+        ip: 192.168.56.11
+        virtualbox__intnet: "private-net"
       - network_name: private_network
-        ip: 192.168.56.12  # Default Interface (within VirtualBox Host-Only range)
+        ip: 192.168.57.12
+        virtualbox__intnet: "default-net"
   - name: client-lan
     box: bento/ubuntu-24.04
     memory: 1024
@@ -27,7 +30,8 @@ platforms:
       vm.boot_timeout: 600
     interfaces:
       - network_name: private_network
-        ip: 192.168.56.20  # Connected to LAN Interface (within VirtualBox Host-Only range)
+        ip: 192.168.56.20
+        virtualbox__intnet: "private-net"
 provisioner:
   name: ansible
   env:

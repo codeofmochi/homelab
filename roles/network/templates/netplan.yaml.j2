@@ -18,7 +18,7 @@ network:
 {% if interface.gateway6 is defined and interface.gateway6 | default('') != '' %}
       gateway6: {{ interface.gateway6 }}
 {% endif %}
-{% if interface.nameservers is defined %}
+{% if interface.nameservers is defined and interface.nameservers | length > 0 %}
       nameservers:
         addresses:
 {% for ns in interface.nameservers %}

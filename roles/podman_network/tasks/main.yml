@@ -53,6 +53,17 @@
 - name: Flush handlers
   ansible.builtin.meta: flush_handlers
 
+- name: Force systemd daemon-reload for user services
+  ansible.builtin.systemd:
+    daemon_reload: true
+    scope: user
+  loop: "{{ podman_network_user_uid.results }}"
+  become: true
+  become_user: "{{ item.item.user }}"
+  environment:
+    XDG_RUNTIME_DIR: "/run/user/{{ item.stdout }}"
+  changed_when: false
+
 - name: Start and enable podman network services
   ansible.builtin.systemd:
     name: "{{ item.item.name }}-network.service"

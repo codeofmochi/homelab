@@ -1,3 +1,5 @@
 ---
 - name: Run main provisioning playbook
   ansible.builtin.import_playbook: ../../playbooks/homelab.yml
+  vars:
+    secrets_file: "{{ molecule_ephemeral_directory }}/secrets.yml"

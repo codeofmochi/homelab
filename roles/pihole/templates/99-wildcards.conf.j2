@@ -1,4 +1,6 @@
+{% if pihole_wildcard_ip is defined and pihole_wildcard_ip | default('') != '' %}
 address=/.lan/{{ pihole_wildcard_ip }}
-{% if pihole_wildcard_ipv6 | default('') != '' %}
+{% endif %}
+{% if pihole_wildcard_ipv6 is defined and pihole_wildcard_ipv6 | default('') != '' %}
 address=/.lan/{{ pihole_wildcard_ipv6 }}
 {% endif %}

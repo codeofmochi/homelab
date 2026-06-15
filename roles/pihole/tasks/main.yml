@@ -241,7 +241,6 @@
     state: started
     enabled: true
     scope: user
-    daemon_reload: true
   become: true
   become_user: "{{ pihole_user }}"
   environment:
@@ -266,13 +265,4 @@
   become: true
   when: pihole_disable_systemd_resolved | bool
 
-- name: Clean up temporary configuration files on host
-  ansible.builtin.file:
-    path: "/home/{{ pihole_user }}/{{ item }}"
-    state: absent
-  loop:
-    - pihole_tmp_custom.list
-    - pihole_tmp_05-custom-static-dhcp.conf
-    - pihole_tmp_99-wildcards.conf
-  become: true
-  become_user: "{{ pihole_user }}"
+

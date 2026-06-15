@@ -74,13 +74,15 @@
     - Reload user systemd for wireguard
     - Restart wireguard
 
+- name: Flush handlers to apply configuration/quadlet updates
+  ansible.builtin.meta: flush_handlers
+
 - name: Ensure WireGuard service is started and enabled
   ansible.builtin.systemd:
     name: wireguard.service
     state: started
     enabled: true
     scope: user
-    daemon_reload: true
   become: true
   become_user: "{{ wireguard_user }}"
   environment:

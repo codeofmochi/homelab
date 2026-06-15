@@ -35,3 +35,6 @@ dist/
 # OS specific
 .DS_Store
 Thumbs.db
+
+# Local secrets file
+inventory/group_vars/secrets.yml

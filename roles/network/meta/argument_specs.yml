@@ -36,4 +36,4 @@ argument_specs:
         type: "list"
         elements: "str"
         required: false
-        description: "List of global DNS nameserver IP addresses to write to /etc/resolv.conf."
+        description: "List of DNS nameserver IP addresses to write to /etc/resolv.conf."

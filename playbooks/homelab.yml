@@ -2,7 +2,6 @@
 - name: Provision and Configure Homelab Server
   hosts: homelab_servers
   become: true
-  # vars_files removed; variables loaded automatically via inventory group_vars/all/
   vars:
     sysctl_overwrite:
       # Required for rootless Podman to spawn containers using user namespaces
@@ -35,28 +34,21 @@
         gateway4: "{{ secrets_default_gateway4 | default('') }}"
         nameservers: "{{ network_dns_servers | default([]) }}"
 
+  pre_tasks:
+    - name: Load secrets file
+      ansible.builtin.include_vars:
+        file: "{{ secrets_file | default('../inventory/group_vars/secrets.yml') }}"
+
 
   tasks:
-    # 1. DevSec Hardening Roles
-    - name: Run DevSec OS Hardening
-      ansible.builtin.import_role:
-        name: devsec.hardening.os_hardening
-      tags: hardening
 
-    - name: Run DevSec SSH Hardening
-      ansible.builtin.import_role:
-        name: devsec.hardening.ssh_hardening
-      tags: hardening
-
-    # 2. Network Role - Bootstrap (Quad9 DNS)
-    - name: Apply base network routing and bootstrap DNS
+    # 2. Network Role - Bootstrap (Sysctl Only)
+    - name: Apply base network sysctls during bootstrap
       ansible.builtin.import_role:
         name: network
       vars:
         network_sysctl_settings: "{{ sysctl_overwrite }}"
-        network_dns_servers:
-          - "9.9.9.9"
-          - "149.112.112.112"
+        network_interfaces: []
 
     # 3. Podman base installation
     - name: Configure Podman on Host for Ansible user
@@ -117,8 +109,8 @@
         name: network
       vars:
         network_dns_servers:
-          - "{{ secrets_private_interface_ip }}"
-          - "{{ secrets_private_interface_ipv6 }}"
+          - "127.0.0.1"
+          - "::1"
 
     # 8. WireGuard VPN Service
     - name: Provision WireGuard VPN (bound to public interface)
@@ -156,3 +148,14 @@
             proxy: "http://vaultwarden:80"
             raw: |
               tls internal
+
+    # 11. DevSec Hardening Roles
+    - name: Run DevSec OS Hardening
+      ansible.builtin.import_role:
+        name: devsec.hardening.os_hardening
+      tags: hardening
+
+    - name: Run DevSec SSH Hardening
+      ansible.builtin.import_role:
+        name: devsec.hardening.ssh_hardening
+      tags: hardening

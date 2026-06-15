@@ -19,6 +19,11 @@
       net.ipv4.ping_group_range: "0 2147483647"
       # Required for WireGuard routing validation
       net.ipv4.conf.all.src_valid_mark: 1
+      # Prevent ARP Flux on multi-homed hosts connected to the same subnet
+      net.ipv4.conf.all.arp_ignore: 1
+      net.ipv4.conf.all.arp_announce: 2
+      net.ipv4.conf.default.arp_ignore: 1
+      net.ipv4.conf.default.arp_announce: 2
 
     network_interfaces:
       - name: "{{ secrets_public_eth_name }}"
@@ -26,13 +31,52 @@
           - "{{ secrets_public_interface_ip }}/{{ secrets_public_interface_prefix | default('24') }}"
         gateway4: "{{ secrets_public_gateway4 | default('') }}"
         nameservers: "{{ network_dns_servers | default([]) }}"
+        routes: "{{ [
+            {
+              'to': secrets_public_interface_ip ~ '/' ~ (secrets_public_interface_prefix | default('24')),
+              'scope': 'link',
+              'table': 100
+            }
+          ] + ([
+            {
+              'to': 'default',
+              'via': secrets_public_gateway4,
+              'table': 100
+            }
+          ] if secrets_public_gateway4 | default('') != '' else []) }}"
+        routing_policy:
+          - from: "{{ secrets_public_interface_ip }}"
+            table: 100
       - name: "{{ secrets_private_eth_name }}"
         addresses: "{{ [secrets_private_interface_ip ~ '/' ~ (secrets_private_interface_prefix | default('24'))] + ([secrets_private_interface_ipv6 ~ '/64'] if secrets_private_interface_ipv6 | default('') != '' else []) }}"
         nameservers: "{{ network_dns_servers | default([]) }}"
+        routes:
+          - to: "{{ secrets_private_interface_ip }}/{{ secrets_private_interface_prefix | default('24') }}"
+            scope: link
+            table: 101
+        routing_policy:
+          - from: "{{ secrets_private_interface_ip }}"
+            table: 101
       - name: "{{ secrets_default_eth_name }}"
         addresses: "{{ [secrets_default_interface_ip ~ '/' ~ (secrets_default_interface_prefix | default('24'))] + ([secrets_default_interface_ipv6 ~ '/64'] if secrets_default_interface_ipv6 | default('') != '' else []) }}"
         gateway4: "{{ secrets_default_gateway4 | default('') }}"
         nameservers: "{{ network_dns_servers | default([]) }}"
+        routes: "{{ [
+            {
+              'to': secrets_default_interface_ip ~ '/' ~ (secrets_default_interface_prefix | default('24')),
+              'scope': 'link',
+              'table': 102
+            }
+          ] + ([
+            {
+              'to': 'default',
+              'via': secrets_default_gateway4,
+              'table': 102
+            }
+          ] if secrets_default_gateway4 | default('') != '' else []) }}"
+        routing_policy:
+          - from: "{{ secrets_default_interface_ip }}"
+            table: 102
 
   pre_tasks:
     - name: Load secrets file

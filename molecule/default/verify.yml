@@ -26,10 +26,7 @@
               eth1:
                 dhcp4: true
                 addresses:
-                  - "fd00:abcd:1::20/64"
-                routes:
-                  - to: 192.168.55.0/24
-                    via: 192.168.56.11
+                  - "fd00:abcd::20/64"
         mode: '0600'
 
     - name: Remove Vagrant static network configuration
@@ -81,7 +78,7 @@
     pihole_verify_ip: 127.0.0.1
     pihole_verify_ipv6: ::1
     wireguard_user: wireguard
-    wireguard_bind_ip: 192.168.55.10
+    wireguard_bind_ip: 192.168.56.10
     wireguard_port: 51820
   tasks:
     - name: Verify Pi-hole DNS host tasks
@@ -110,11 +107,11 @@
   become: true
   vars:
     pihole_ip: 192.168.56.11
-    pihole_ipv6: fd00:abcd:1::11
+    pihole_ipv6: fd00:abcd::11
     target_lan_domain: vaultwarden.lan
     target_lan_ipv6_domain: vaultwarden.lan
     expected_lan_ip: 192.168.56.11
-    expected_lan_ipv6: fd00:abcd:1::11
+    expected_lan_ipv6: fd00:abcd::11
   tasks:
     - name: Run shared Pi-hole client verification tasks
       ansible.builtin.include_role:
@@ -168,7 +165,8 @@
           {{
             wireguard_peer1_conf.content
             | b64decode
-            | regex_replace('(?m)^DNS\\s*=.*\\n', '')
+            | regex_replace('DNS *= *[0-9.,]+', '')
+            | regex_replace('AllowedIPs *= *[0-9.,/]+', 'AllowedIPs = 10.13.13.0/24')
           }}
 
     - name: Ensure test interface is absent before handshake check

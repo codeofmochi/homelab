@@ -15,13 +15,13 @@ platforms:
     interfaces:
       - network_name: private_network
         ip: 192.168.55.10
-        virtualbox__intnet: "public-net"
+        virtualbox__intnet: "homelab-net"
       - network_name: private_network
         ip: 192.168.56.11
-        virtualbox__intnet: "private-net"
+        virtualbox__intnet: "homelab-net"
       - network_name: private_network
         ip: 192.168.57.12
-        virtualbox__intnet: "default-net"
+        virtualbox__intnet: "homelab-net"
   - name: client-lan
     box: bento/ubuntu-24.04
     memory: 1024
@@ -31,7 +31,7 @@ platforms:
     interfaces:
       - network_name: private_network
         ip: 192.168.56.20
-        virtualbox__intnet: "private-net"
+        virtualbox__intnet: "homelab-net"
 provisioner:
   name: ansible
   env:

@@ -28,6 +28,16 @@ argument_specs:
             elements: "str"
             required: false
             description: "List of DNS nameserver IP addresses."
+          routes:
+            type: "list"
+            elements: "dict"
+            required: false
+            description: "List of custom routes for this interface."
+          routing_policy:
+            type: "list"
+            elements: "dict"
+            required: false
+            description: "List of routing policy rules for this interface."
       network_sysctl_settings:
         type: "dict"
         required: false

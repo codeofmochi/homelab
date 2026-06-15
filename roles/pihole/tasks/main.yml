@@ -215,15 +215,6 @@
   when: not (pihole_enable_wildcard_lan | default(false) | bool) and wildcard_conf_dest.stat.exists
   notify: Restart pihole
 
-- name: Clean up any legacy host temp files
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - "/home/{{ pihole_user }}/pihole_tmp_custom.list"
-    - "/home/{{ pihole_user }}/pihole_tmp_05-custom-static-dhcp.conf"
-    - "/home/{{ pihole_user }}/pihole_tmp_99-wildcards.conf"
-  become: true
 
 - name: Ensure podman systemd quadlet directory exists
   ansible.builtin.file:

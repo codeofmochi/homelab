@@ -25,5 +25,30 @@ network:
           - {{ ns }}
 {% endfor %}
 {% endif %}
+{% if interface.routes is defined and interface.routes | length > 0 %}
+      routes:
+{% for route in interface.routes %}
+        - to: {{ route.to }}
+{% if route.via is defined and route.via | default('') != '' %}
+          via: {{ route.via }}
+{% endif %}
+{% if route.scope is defined and route.scope | default('') != '' %}
+          scope: {{ route.scope }}
+{% endif %}
+{% if route.table is defined and route.table | default('') != '' %}
+          table: {{ route.table }}
+{% endif %}
 {% endfor %}
 {% endif %}
+{% if interface.routing_policy is defined and interface.routing_policy | length > 0 %}
+      routing-policy:
+{% for policy in interface.routing_policy %}
+        - from: {{ policy.from }}
+{% if policy.table is defined and policy.table | default('') != '' %}
+          table: {{ policy.table }}
+{% endif %}
+{% endfor %}
+{% endif %}
+{% endfor %}
+{% endif %}
+
